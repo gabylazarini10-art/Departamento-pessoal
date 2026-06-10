@@ -831,53 +831,68 @@ function processarHolerites(texto,pfx){
 }
 
 function extrairHolerite(pag){
+  // Formato pdf.js (confirmado pelo console):
+  // linha 0: "cp_tipo_c 499- JOSE NEY LAZARINI"
+  // linha 1: "CPF: 592... CC: GERAL Folha Mensal"
+  // linha 2: "Mensalista Maio de 2026"
+  // linha 3: "Código Nome do Funcionário CBO Departamento Filial"
+  // linha 4: "1 2027 GABRIELA LAZARINI 411005 1 1"
+  // linha 5: "Admissão: 11/02/2022 AUXILIAR ADMINISTRATIVO"
+  // linha 6: "Código Descrição Referência Vencimentos Descontos"
+  // linha 7: "1 HORAS NORMAIS 220:00 3.245,00"       ← provento: só vencimento
+  // linha 8: "992 ARREDONDAMENTO DO MES 0,00 0,15"   ← desconto: ref e valor desc
+  // linha 9: "998 I.N.S.S. 8,57 277,98"              ← desconto: ref e valor desc
+  // linha 10:"993 TROCO MES ANTERIOR 0,17 0,17"
+  // ...depois totais inline
+
   const linhas=pag.split('\n').map(l=>l.trim()).filter(Boolean);
   const txt=linhas.join(' ');
   const h={nome:'',id:'',cargo:'',admissao:'',competencia:'',salario_bruto:0,inss:0,irrf:0,fgts:0,outros_descontos:0,outros_proventos:0,liquido:0,verbas:[]};
 
-  // ── Competência ──
+  // ── Competência: "Mensalista Maio de 2026" ──
   const MESES={janeiro:'01',fevereiro:'02',marco:'03',abril:'04',maio:'05',junho:'06',julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12'};
   const mComp=txt.match(/\b(Janeiro|Fevereiro|Mar[çc]o|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)\s+de\s+(\d{4})\b/i);
   if(mComp){const mn=mComp[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');h.competencia=(MESES[mn]||'00')+'/'+mComp[2];}
 
-  // ── Nome + ID ──
-  // Texto colado: "2027\nCódigo\nGABRIELA LAZARINI\nNome do Funcionário CBO"
+  // ── Nome + ID: linha "Código Nome do Funcionário..." é seguida por "1 2027 GABRIELA LAZARINI 411005 1 1" ──
+  // Padrão pdf.js: FILIAL COD NOME CBO DEPTO FILIAL
   for(let i=0;i<linhas.length;i++){
-    if(/^C[oó]digo$/i.test(linhas[i])&&i+1<linhas.length){
-      const prox=linhas[i+1];
-      if(/^[A-Z][A-Z\s]{4,}$/.test(prox)&&!h.nome){
-        h.nome=prox.trim();
+    if(/C[oó]digo\s+Nome\s+do\s+Funcion/i.test(linhas[i])&&i+1<linhas.length){
+      // Próxima linha: "1 2027 GABRIELA LAZARINI 411005 1 1"
+      const m=linhas[i+1].match(/^\d+\s+(\d{1,6})\s+([A-Z][A-Z\s]+?)\s+\d{5,6}/);
+      if(m){h.id=m[1];h.nome=m[2].trim().replace(/\s+/g,' ');break;}
+      // Fallback: qualquer padrão COD NOME na linha
+      const m2=linhas[i+1].match(/(\d{1,6})\s+([A-Z][A-Z\s]{4,60})/);
+      if(m2){h.id=m2[1];h.nome=m2[2].trim().replace(/\s+/g,' ');break;}
+    }
+  }
+  // Fallback para texto colado: "Código\nNOME\nNome do Funcionário"
+  if(!h.nome){
+    for(let i=0;i<linhas.length;i++){
+      if(/^C[oó]digo$/i.test(linhas[i])&&i+1<linhas.length&&/^[A-Z][A-Z\s]{4,}$/.test(linhas[i+1])){
+        h.nome=linhas[i+1].trim();
         if(i>0&&/^\d{1,6}$/.test(linhas[i-1]))h.id=linhas[i-1];
+        break;
       }
     }
   }
-  // Fallback texto plano
-  if(!h.nome){
-    const m=txt.match(/\b(\d{1,6})\s+(?:C[oó]digo\s+)?([A-Z][A-Z\s]{4,60}?)\s+Nome\s+do\s+Funcion/i);
-    if(m){h.id=m[1];h.nome=m[2].trim().replace(/\s+/g,' ');}
-  }
-  if(!h.nome){
-    const m=txt.match(/([A-Z][A-Z\s]{6,60}?)\s+Nome\s+do\s+Funcion/i);
-    if(m)h.nome=m[1].trim().replace(/\s+/g,' ');
-  }
 
-  // ── Cargo: linha "CARGO Admissão: DD/MM/YYYY" ──
+  // ── Cargo + Admissão: linha "Admissão: DD/MM/YYYY CARGO" ou "CARGO Admissão: DD/MM/YYYY" ──
   for(const l of linhas){
-    const m=l.match(/^([A-Z][A-Z\s]{3,50})\s+Admiss[ãa]o:\s+\d{2}\/\d{2}\/\d{4}$/i);
-    if(m&&!/MENSALISTA|GERAL|FOLHA|FILIAL|CBO|CPF/i.test(m[1])){h.cargo=m[1].trim();break;}
+    // Formato pdf.js: "Admissão: 11/02/2022 AUXILIAR ADMINISTRATIVO"
+    const m1=l.match(/Admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})\s+([A-Z][A-Z\s]{3,50})/i);
+    if(m1){h.admissao=pBR(m1[1]);h.cargo=m1[2].trim();break;}
+    // Formato colado: "AUXILIAR ADMINISTRATIVO Admissão: 11/02/2022"
+    const m2=l.match(/^([A-Z][A-Z\s]{3,50})\s+Admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})/i);
+    if(m2&&!/MENSALISTA|GERAL|FOLHA|FILIAL|CBO|CPF/i.test(m2[1])){h.cargo=m2[1].trim();h.admissao=pBR(m2[2]);break;}
   }
-  if(!h.cargo){
-    const m=txt.match(/([A-Z][A-Z\s]{4,50}?)\s+Admiss[ãa]o[:\s]/i);
-    if(m&&!/MENSALISTA|GERAL|FOLHA|FILIAL|CBO|CPF/i.test(m[1]))h.cargo=m[1].trim().replace(/\s+/g,' ');
-  }
+  if(!h.admissao){const m=txt.match(/Admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})/i);if(m)h.admissao=pBR(m[1]);}
 
-  // ── Admissão ──
-  const mAdm=txt.match(/Admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})/i);
-  if(mAdm)h.admissao=pBR(mAdm[1]);
-
-  // ── Verbas: estrutura fixa da BS Assessoria ──
-  // Seção: [n códigos] [n descrições] [n referências hh:mm|0,00] [n valores]
-  // Os valores ficam na posição 3*n a 4*n-1 da seção
+  // ── Verbas: cada linha tem "COD DESCRICAO REF VENC [DESC]" ──
+  // Formato pdf.js confirmado:
+  // provento: "1 HORAS NORMAIS 220:00 3.245,00"         → último valor = vencimento
+  // desconto: "998 I.N.S.S. 8,57 277,98"               → último valor = desconto
+  // misto:    "992 ARREDONDAMENTO DO MES 0,00 0,15"     → 0,00=venc 0,15=desc
   const MAPA_V={
     '1':{n:'Horas Normais',t:'provento'},
     '16':{n:'Insalubridade 20%',t:'provento'},
@@ -894,57 +909,85 @@ function extrairHolerite(pag){
     '8111':{n:'Plano de Saúde',t:'desconto'},
   };
 
-  const secMatch=pag.match(/C[oó]digo\s+Descri[çc][ãa]o[\s\S]+?_{4}/i);
-  if(secMatch){
-    const lsec=secMatch[0].replace(/C[oó]digo\s+Descri[çc][ãa]o[^\n]*\n/i,'').split('\n').map(l=>l.trim()).filter(Boolean);
-    let nv=0;
-    while(nv<lsec.length&&MAPA_V[lsec[nv]])nv++;
-    const codigos=lsec.slice(0,nv);
-    const valores=lsec.slice(3*nv,4*nv).map(pNum);
-    codigos.forEach((cod,i)=>{
-      const vd=MAPA_V[cod];if(!vd)return;
-      const val=valores[i]||0;
-      if(val>0&&!h.verbas.find(v=>v.nome===vd.n)){
-        h.verbas.push({nome:vd.n,tipo:vd.t,valor:val});
-        if(vd.c==='inss')h.inss=val;
-        else if(vd.c==='irrf')h.irrf=val;
-        else if(vd.t==='desconto'&&!['992','993'].includes(cod))h.outros_descontos+=val;
-      }
-    });
-  }
+  linhas.forEach(l=>{
+    // Linha de verba: começa com código numérico conhecido
+    const mV=l.match(/^(\d{1,4})\s+(.+?)\s+([\d:]+(?:,\d{2})?)\s+([\d.]+,\d{2})(?:\s+([\d.]+,\d{2}))?$/);
+    if(!mV)return;
+    const cod=mV[1];
+    const vd=MAPA_V[cod];
+    if(!vd)return;
+    // mV[4] = último par de valores (venc para provento, pode ser desc para desconto)
+    // mV[5] = valor extra (desconto quando há dois valores no final)
+    const v4=pNum(mV[4]), v5=pNum(mV[5]||'0');
+    // Para descontos: se há dois valores, o último é o desconto
+    // Para proventos: o primeiro valor grande é o vencimento
+    let val=0;
+    if(vd.t==='desconto'){val=v5>0?v5:v4;}
+    else{val=v4;}
+    if(val>0&&!h.verbas.find(v=>v.nome===vd.n)){
+      h.verbas.push({nome:vd.n,tipo:vd.t,valor:val});
+      if(vd.c==='inss')h.inss=val;
+      else if(vd.c==='irrf')h.irrf=val;
+      else if(vd.t==='desconto'&&!['992','993'].includes(cod))h.outros_descontos+=val;
+    }
+  });
 
-  // ── Totais: após 'Faixa IRRF' aparecem bruto → descontos → líquido ──
-  // Todos os valores reais de total são >= R$100, então filtramos por isso
-  const faixaIdx=linhas.findIndex(l=>/Faixa\s+IRRF/i.test(l));
-  if(faixaIdx>=0){
-    const vals=[];
-    for(let i=faixaIdx+1;i<linhas.length&&vals.length<3;i++){
-      if(/^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(linhas[i])){
-        const v=pNum(linhas[i]);
-        if(v>=100)vals.push(v);
+  // ── Totais: linha "Total de Vencimentos Total de Descontos" seguida dos valores ──
+  // Formato pdf.js: os totais aparecem inline em linhas separadas após as verbas
+  // "Salário Base Sal. Contr. INSS Base Cálc. FGTS F.G.T.S do Mês Base Cálc. IRRF Faixa IRRF"
+  // seguido de "3.245,00 3.245,00 3.245,00 259,60 2.967,02 7,50"
+  // e "Total de Vencimentos Total de Descontos" + "3.245,15 278,15"
+  // e "Valor Líquido" + "2.967,00"
+
+  // Busca "Total de Vencimentos" e pega próximos valores
+  for(let i=0;i<linhas.length;i++){
+    if(/Total\s+de\s+Vencimentos/i.test(linhas[i])){
+      // Pode estar na mesma linha: "Total de Vencimentos 3.245,15 Total de Descontos 278,15"
+      const mInline=linhas[i].match(/Total\s+de\s+Vencimentos\s+([\d.]+,\d{2}).*?Total\s+de\s+Descontos\s+([\d.]+,\d{2})/i);
+      if(mInline){h.salario_bruto=pNum(mInline[1]);}
+      // Ou em linhas separadas
+      if(!h.salario_bruto){
+        for(let j=i+1;j<Math.min(i+5,linhas.length);j++){
+          if(/^\d{1,3}(?:\.\d{3})+,\d{2}$/.test(linhas[j])){h.salario_bruto=pNum(linhas[j]);break;}
+          const mV2=linhas[j].match(/^([\d.]+,\d{2})\s+([\d.]+,\d{2})/);
+          if(mV2){h.salario_bruto=pNum(mV2[1]);break;}
+        }
       }
     }
-    if(vals.length>=3){h.salario_bruto=vals[0];h.liquido=vals[2];}
-    else if(vals.length===2){h.salario_bruto=vals[0];h.liquido=vals[1];}
-  }
-  // Fallback bruto
-  if(!h.salario_bruto){
-    const bIdx=linhas.findIndex(l=>/Total\s+de\s+Vencimentos/i.test(l));
-    if(bIdx>=0){for(let i=bIdx+1;i<Math.min(bIdx+10,linhas.length);i++){if(/^\d{1,3}(?:\.\d{3})+,\d{2}$/.test(linhas[i])){h.salario_bruto=pNum(linhas[i]);break;}}}
-  }
-  // Fallback líquido
-  if(!h.liquido){
-    const vlIdx=linhas.findIndex(l=>/Valor\s+L[ií]quido/i.test(l));
-    if(vlIdx>=0){for(let i=vlIdx+1;i<Math.min(vlIdx+12,linhas.length);i++){if(/^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(linhas[i])&&pNum(linhas[i])>=100){h.liquido=pNum(linhas[i]);break;}}}
+    if(/Valor\s+L[ií]quido/i.test(linhas[i])&&!h.liquido){
+      // Mesmo linha ou próxima
+      const mInline=linhas[i].match(/Valor\s+L[ií]quido\s+([\d.]+,\d{2})/i);
+      if(mInline){h.liquido=pNum(mInline[1]);}
+      else{
+        for(let j=i+1;j<Math.min(i+5,linhas.length);j++){
+          if(/^\d{1,3}(?:\.\d{3})+,\d{2}$/.test(linhas[j])&&pNum(linhas[j])>=100){h.liquido=pNum(linhas[j]);break;}
+        }
+      }
+    }
+    // FGTS: "F.G.T.S do Mês 259,60"
+    if(/F\.G\.T\.S\s+do\s+M[eê]s/i.test(linhas[i])&&!h.fgts){
+      const mF=linhas[i].match(/F\.G\.T\.S\s+do\s+M[eê]s\s+([\d.]+,\d{2})/i);
+      if(mF)h.fgts=pNum(mF[1]);
+    }
   }
 
-  // FGTS
-  const mFgts=txt.match(/F\.G\.T\.S\s+do\s+M[eê]s[\s\S]{0,80}?(\d{1,3}(?:\.\d{3})+,\d{2}|\d{2,3},\d{2})/i);
-  if(mFgts)h.fgts=pNum(mFgts[1]);
+  // Fallback: após "Faixa IRRF" os 3 valores >= 100 são bruto, desc, liq
+  if(!h.salario_bruto||!h.liquido){
+    const fi=linhas.findIndex(l=>/Faixa\s+IRRF/i.test(l));
+    if(fi>=0){
+      const vals=[];
+      for(let i=fi+1;i<linhas.length&&vals.length<3;i++){
+        if(/^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(linhas[i])&&pNum(linhas[i])>=100)vals.push(pNum(linhas[i]));
+      }
+      if(!h.salario_bruto&&vals[0])h.salario_bruto=vals[0];
+      if(!h.liquido&&vals[2])h.liquido=vals[2];
+      else if(!h.liquido&&vals[1])h.liquido=vals[1];
+    }
+  }
 
-  // Se ainda sem bruto/liq, calcula pelas verbas
+  // Último fallback: calcula pelas verbas
   if(!h.salario_bruto){const tp=h.verbas.filter(v=>v.tipo==='provento').reduce((s,v)=>s+v.valor,0);if(tp>0)h.salario_bruto=tp;}
-  if(!h.liquido&&h.salario_bruto>0){const td=h.verbas.filter(v=>v.tipo==='desconto').reduce((s,v)=>s+v.valor,0);if(td>0)h.liquido=h.salario_bruto-td;}
+  if(!h.liquido&&h.salario_bruto>0){const td=h.verbas.filter(v=>v.tipo==='desconto').reduce((s,v)=>s+v.valor,0);if(td>0)h.liquido=Math.round((h.salario_bruto-td)*100)/100;}
 
   return h.nome?h:null;
 }
