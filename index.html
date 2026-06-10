@@ -1005,8 +1005,10 @@ function extrairHolerite(pag){
 }
 
 // ═══════════════════ PLANEJADOR DE FÉRIAS ═══════════════════
-function rPlan(){
-  const ano=new Date().getFullYear();
+function rPlan(anoSel){
+  const anoAtual=new Date().getFullYear();
+  const ano=anoSel||anoAtual;
+  const anos=[anoAtual, anoAtual+1, anoAtual+2];
   const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -1066,12 +1068,17 @@ function rPlan(){
     el.innerHTML=`
       <div style="margin-bottom:16px">
         ${avisos}
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
-            <div style="font-size:13px;font-weight:600">Planejamento ${ano}</div>
+            <div style="font-size:13px;font-weight:600">Planejamento de Férias</div>
             <div style="font-size:11px;color:var(--tx3);margin-top:2px">Distribua os funcionários nos meses para organizar as férias</div>
           </div>
-          <button class="btn" onclick="limparPlano()" style="font-size:11px">Limpar planejamento</button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;border:1px solid var(--bd2);border-radius:var(--r);overflow:hidden">
+              ${anos.map(a=>`<button onclick="rPlan(${a})" style="padding:5px 14px;font-size:12px;font-weight:500;border:none;cursor:pointer;background:${a===ano?'var(--tx)':'var(--sf)'};color:${a===ano?'#fff':'var(--tx2)'};transition:all .12s">${a}</button>`).join('')}
+            </div>
+            <button class="btn" onclick="limparPlano(${ano})" style="font-size:11px">Limpar ${ano}</button>
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${grade}</div>
       </div>`;
@@ -1088,9 +1095,10 @@ function rPlan(){
     plano[mesKey]=plano[mesKey].filter(x=>x!==fid);
     salvarPlano();renderizar();
   };
-  window.limparPlano=function(){
-    if(!confirm('Limpar todo o planejamento?'))return;
-    plano={};salvarPlano();renderizar();
+  window.limparPlano=function(a){
+    if(!confirm(`Limpar planejamento de ${a}?`))return;
+    for(let m=1;m<=12;m++){const k=`${a}-${String(m).padStart(2,'0')}`;delete plano[k];}
+    salvarPlano();renderizar();
   };
 
   renderizar();
