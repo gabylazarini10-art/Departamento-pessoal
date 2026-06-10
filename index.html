@@ -642,6 +642,11 @@ async function lerPDF(file,tipo){
       textoTotal+=linhas.join('\n')+'\n---PAGINA---\n';
     }
     setBar(pfx,60,'Extraindo dados...');
+    // DEBUG: mostra as primeiras 80 linhas do texto extraído
+    const linhasDebug=textoTotal.split('\n').slice(0,80);
+    console.log('=== TEXTO EXTRAÍDO PELO PDF.JS (primeiras 80 linhas) ===');
+    linhasDebug.forEach((l,i)=>console.log(i+':',l));
+    console.log('=== FIM DEBUG ===');
     if(tipo==='ferias') processarFerias(textoTotal,pfx);
     else processarHolerites(textoTotal,pfx);
   }catch(err){
@@ -908,22 +913,30 @@ function extrairHolerite(pag){
     });
   }
 
-  // ── Totais: após bloco de labels, aparecem bruto/desc/liq em sequência ──
-  // Padrão: "Total de Vencimentos\nValor Líquido\nTotal de Descontos\n...\nBRUTO\nDESC\nLIQ"
-  const tvIdx=linhas.findIndex(l=>/Total\s+de\s+Vencimentos/i.test(l));
-  if(tvIdx>=0){
-    const grandes=[];
-    for(let i=tvIdx;i<linhas.length&&grandes.length<3;i++){
-      if(/^\d{1,3}(?:\.\d{3})+,\d{2}$/.test(linhas[i]))grandes.push(pNum(linhas[i]));
+  // ── Totais: após 'Faixa IRRF' aparecem bruto → descontos → líquido ──
+  // Todos os valores reais de total são >= R$100, então filtramos por isso
+  const faixaIdx=linhas.findIndex(l=>/Faixa\s+IRRF/i.test(l));
+  if(faixaIdx>=0){
+    const vals=[];
+    for(let i=faixaIdx+1;i<linhas.length&&vals.length<3;i++){
+      if(/^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(linhas[i])){
+        const v=pNum(linhas[i]);
+        if(v>=100)vals.push(v);
+      }
     }
-    if(grandes[0])h.salario_bruto=grandes[0];
-    if(grandes[2])h.liquido=grandes[2];
-    else if(grandes[1])h.liquido=grandes[1];
+    if(vals.length>=3){h.salario_bruto=vals[0];h.liquido=vals[2];}
+    else if(vals.length===2){h.salario_bruto=vals[0];h.liquido=vals[1];}
   }
-
-  // Fallback totais via regex
-  if(!h.salario_bruto){const m=txt.match(/Total\s+de\s+Vencimentos[\s\S]{0,100}?(\d{1,3}(?:\.\d{3})+,\d{2})/i);if(m)h.salario_bruto=pNum(m[1]);}
-  if(!h.liquido){const m=txt.match(/Valor\s+L[ií]quido[\s\S]{0,100}?(\d{1,3}(?:\.\d{3})+,\d{2})/i);if(m)h.liquido=pNum(m[1]);}
+  // Fallback bruto
+  if(!h.salario_bruto){
+    const bIdx=linhas.findIndex(l=>/Total\s+de\s+Vencimentos/i.test(l));
+    if(bIdx>=0){for(let i=bIdx+1;i<Math.min(bIdx+10,linhas.length);i++){if(/^\d{1,3}(?:\.\d{3})+,\d{2}$/.test(linhas[i])){h.salario_bruto=pNum(linhas[i]);break;}}}
+  }
+  // Fallback líquido
+  if(!h.liquido){
+    const vlIdx=linhas.findIndex(l=>/Valor\s+L[ií]quido/i.test(l));
+    if(vlIdx>=0){for(let i=vlIdx+1;i<Math.min(vlIdx+12,linhas.length);i++){if(/^\d{1,3}(?:\.\d{3})*,\d{2}$/.test(linhas[i])&&pNum(linhas[i])>=100){h.liquido=pNum(linhas[i]);break;}}}
+  }
 
   // FGTS
   const mFgts=txt.match(/F\.G\.T\.S\s+do\s+M[eê]s[\s\S]{0,80}?(\d{1,3}(?:\.\d{3})+,\d{2}|\d{2,3},\d{2})/i);
