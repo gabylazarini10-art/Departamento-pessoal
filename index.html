@@ -1009,90 +1009,159 @@ function rPlan(anoSel){
   const anoAtual=new Date().getFullYear();
   const ano=anoSel||anoAtual;
   const anos=[anoAtual, anoAtual+1, anoAtual+2];
-  const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-
-  // Funcionários com saldo > 0 (precisam de férias)
   const comSaldo=funcs.filter(f=>totalSaldo(f)>0&&f.status!=='Inativo');
 
-  // Carrega planejamento salvo
-  let plano=JSON.parse(localStorage.getItem('dp4_plano')||'{}');
+  // plano[mesKey] = [{fid, dias, venda}]
+  let plano=JSON.parse(localStorage.getItem('dp4_plano2')||'{}');
+  // migra formato antigo (array de strings)
+  Object.keys(plano).forEach(k=>{
+    if(plano[k].length&&typeof plano[k][0]==='string'){
+      plano[k]=plano[k].map(fid=>({fid,dias:0,venda:false}));
+    }
+  });
 
-  function salvarPlano(){localStorage.setItem('dp4_plano',JSON.stringify(plano));}
+  function salvarPlano(){localStorage.setItem('dp4_plano2',JSON.stringify(plano));}
+
+  function diasPlanejados(fid){
+    let t=0;
+    for(let m=1;m<=12;m++){const k=`${ano}-${String(m).padStart(2,'0')}`;(plano[k]||[]).forEach(e=>{if(e.fid===fid&&!e.venda)t+=e.dias||0;});}
+    return t;
+  }
+  function diasVendidos(fid){
+    let t=0;
+    for(let m=1;m<=12;m++){const k=`${ano}-${String(m).padStart(2,'0')}`;(plano[k]||[]).forEach(e=>{if(e.fid===fid&&e.venda)t+=e.dias||0;});}
+    return t;
+  }
 
   function renderizar(){
     const el=document.getElementById('plan-content');
-
-    // Resumo de atenção
     const acums=comSaldo.filter(f=>isAcum(f));
     const vencidas=comSaldo.filter(f=>wS(f)==='vencida');
     const alertas=comSaldo.filter(f=>wS(f)==='alerta');
 
     let avisos='';
-    if(vencidas.length)avisos+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--rd-bg);border-radius:var(--r);margin-bottom:8px;font-size:12px;color:var(--rd-tx)"><strong>🔴 ${vencidas.length} funcionário(s) com férias VENCIDAS:</strong> ${vencidas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
-    if(acums.length)avisos+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--r);margin-bottom:8px;font-size:12px;color:#92400E"><strong>⚠ ${acums.length} funcionário(s) com férias ACUMULADAS:</strong> ${acums.map(f=>f.nome.split(' ')[0]+' ('+totalSaldo(f)+'d)').join(', ')}</div>`;
-    if(alertas.length)avisos+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--am-bg);border-radius:var(--r);margin-bottom:16px;font-size:12px;color:var(--am-tx)"><strong>🟡 ${alertas.length} funcionário(s) com vencimento próximo:</strong> ${alertas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
+    if(vencidas.length)avisos+=`<div style="padding:10px 14px;background:var(--rd-bg);border-radius:var(--r);margin-bottom:8px;font-size:12px;color:var(--rd-tx)"><strong>🔴 ${vencidas.length} com férias VENCIDAS:</strong> ${vencidas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
+    if(acums.length)avisos+=`<div style="padding:10px 14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--r);margin-bottom:8px;font-size:12px;color:#92400E"><strong>⚠ ${acums.length} com férias ACUMULADAS:</strong> ${acums.map(f=>f.nome.split(' ')[0]+' ('+totalSaldo(f)+'d)').join(', ')}</div>`;
+    if(alertas.length)avisos+=`<div style="padding:10px 14px;background:var(--am-bg);border-radius:var(--r);margin-bottom:16px;font-size:12px;color:var(--am-tx)"><strong>🟡 ${alertas.length} com vencimento próximo:</strong> ${alertas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
 
-    // Grade de meses
+    // Painel lateral resumo
+    const resumoFuncs=comSaldo.map(f=>{
+      const saldo=totalSaldo(f);
+      const planej=diasPlanejados(f.id);
+      const vendidos=diasVendidos(f.id);
+      const restante=saldo-planej-vendidos;
+      const c=ac(f.nome);
+      const pct=saldo>0?Math.min(100,Math.round((planej+vendidos)/saldo*100)):0;
+      return`<div style="padding:9px 12px;border-bottom:1px solid var(--bd)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div class="av" style="background:${c.bg};color:${c.fg};width:24px;height:24px;font-size:9px;flex-shrink:0">${ini(f.nome)}</div>
+          <div style="flex:1;min-width:0;font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]}</div>
+          <span style="font-size:10px;font-weight:600;color:${restante<=0?'var(--gr)':'var(--am)'};flex-shrink:0">${restante}d</span>
+        </div>
+        <div style="background:var(--sf2);border-radius:99px;height:4px;overflow:hidden;margin-bottom:3px">
+          <div style="height:100%;border-radius:99px;background:${restante<=0?'var(--gr)':'var(--am)'};width:${pct}%"></div>
+        </div>
+        <div style="display:flex;gap:8px;font-size:10px;color:var(--tx3)">
+          <span>Saldo: ${saldo}d</span>
+          ${planej?`<span style="color:var(--bl-tx)">Férias: ${planej}d</span>`:''}
+          ${vendidos?`<span style="color:var(--am-tx)">Venda: ${vendidos}d</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
+
+    // Grade meses
     let grade='';
     for(let m=0;m<12;m++){
       const mesKey=`${ano}-${String(m+1).padStart(2,'0')}`;
-      const planejados=(plano[mesKey]||[]);
-      const tags=planejados.map(fid=>{
-        const f=funcs.find(x=>x.id===fid);
-        if(!f)return'';
+      const entradas=(plano[mesKey]||[]);
+      const tags=entradas.map((e,ei)=>{
+        const f=funcs.find(x=>x.id===e.fid);if(!f)return'';
         const c=ac(f.nome);
-        const acumF=isAcum(f);
-        return`<div style="display:flex;align-items:center;gap:4px;background:${acumF?'#FEF3C7':c.bg};border:1px solid ${acumF?'#FDE68A':c.bg};border-radius:5px;padding:3px 7px;font-size:11px;font-weight:500;color:${acumF?'#92400E':c.fg}">
-          ${f.nome.split(' ')[0]}${f.nome.split(' ').length>1?' '+f.nome.split(' ').slice(-1)[0]:''}
-          <button onclick="removerDoMes('${fid}','${mesKey}')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;line-height:1;font-size:13px">×</button>
+        const isVenda=e.venda;
+        const bg=isVenda?'#FDF3E0':isAcum(f)?'#FEF3C7':c.bg;
+        const cor=isVenda?'#7A4D0A':isAcum(f)?'#92400E':c.fg;
+        const bor=isVenda||isAcum(f)?'#FDE68A':c.bg;
+        const nome=f.nome.split(' ')[0]+' '+f.nome.split(' ').slice(-1)[0];
+        return`<div style="background:${bg};border:1px solid ${bor};border-radius:6px;padding:5px 8px;font-size:11px;font-weight:500;color:${cor}">
+          <div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">
+            <span>${isVenda?'💰':''}${nome}${e.dias?' · '+e.dias+'d':''}</span>
+            <button onclick="removerDoMes('${e.fid}','${mesKey}',${ei})" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.5;padding:0;line-height:1;font-size:13px;margin-left:auto">×</button>
+          </div>
+          <div style="display:flex;gap:5px;align-items:center">
+            <input type="number" min="1" max="30" value="${e.dias||''}" placeholder="dias"
+              onchange="atualizarDias('${e.fid}','${mesKey}',${ei},this.value)"
+              style="width:54px;padding:2px 5px;font-size:10px;border:1px solid ${bor};border-radius:4px;background:var(--sf);color:var(--tx)">
+            <label style="display:flex;align-items:center;gap:3px;font-size:10px;cursor:pointer;font-weight:400;white-space:nowrap">
+              <input type="checkbox" ${isVenda?'checked':''} onchange="toggleVenda('${e.fid}','${mesKey}',${ei},this.checked)" style="cursor:pointer">
+              💰 Venda
+            </label>
+          </div>
         </div>`;
       }).join('');
 
-      // Funcionários não planejados neste mês
-      const disponiveis=comSaldo.filter(f=>!(plano[mesKey]||[]).includes(f.id));
-      const opts=disponiveis.map(f=>`<option value="${f.id}">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]} (${totalSaldo(f)}d${isAcum(f)?'⚠':''})</option>`).join('');
+      const jaEsta=entradas.map(e=>e.fid);
+      const disponiveis=comSaldo.filter(f=>!jaEsta.includes(f.id));
+      const opts=disponiveis.map(f=>{
+        const rest=totalSaldo(f)-diasPlanejados(f.id)-diasVendidos(f.id);
+        return`<option value="${f.id}">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]} (${rest}d${isAcum(f)?'⚠':''})</option>`;
+      }).join('');
 
       grade+=`<div style="background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden">
-        <div style="padding:10px 12px;background:var(--sf2);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">
+        <div style="padding:9px 12px;background:var(--sf2);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:12px;font-weight:600">${MESES_FULL[m]} ${ano}</span>
-          <span style="font-size:10px;color:var(--tx3)">${planejados.length} funcionário(s)</span>
+          <span style="font-size:10px;color:var(--tx3)">${entradas.length} func.</span>
         </div>
-        <div style="padding:10px 12px;min-height:60px">
-          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:${disponiveis.length?'8':'0'}px">${tags||'<span style="font-size:11px;color:var(--tx3)">Nenhum planejado</span>'}</div>
+        <div style="padding:10px 12px;min-height:64px">
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:${disponiveis.length?'8':'0'}px">${tags||'<span style="font-size:11px;color:var(--tx3)">Nenhum planejado</span>'}</div>
           ${disponiveis.length?`<select onchange="adicionarAoMes(this,'${mesKey}')" style="width:100%;font-size:11px;padding:4px 7px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx)"><option value="">+ Adicionar funcionário...</option>${opts}</select>`:''}
         </div>
       </div>`;
     }
 
-    el.innerHTML=`
-      <div style="margin-bottom:16px">
-        ${avisos}
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-          <div>
-            <div style="font-size:13px;font-weight:600">Planejamento de Férias</div>
-            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Distribua os funcionários nos meses para organizar as férias</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="display:flex;border:1px solid var(--bd2);border-radius:var(--r);overflow:hidden">
-              ${anos.map(a=>`<button onclick="rPlan(${a})" style="padding:5px 14px;font-size:12px;font-weight:500;border:none;cursor:pointer;background:${a===ano?'var(--tx)':'var(--sf)'};color:${a===ano?'#fff':'var(--tx2)'};transition:all .12s">${a}</button>`).join('')}
-            </div>
-            <button class="btn" onclick="limparPlano(${ano})" style="font-size:11px">Limpar ${ano}</button>
-          </div>
+    el.innerHTML=`<div style="margin-bottom:16px">
+      ${avisos}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:13px;font-weight:600">Planejamento de Férias</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Informe os dias e marque 💰 para venda de férias</div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${grade}</div>
-      </div>`;
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="display:flex;border:1px solid var(--bd2);border-radius:var(--r);overflow:hidden">
+            ${anos.map(a=>`<button onclick="rPlan(${a})" style="padding:5px 14px;font-size:12px;font-weight:500;border:none;cursor:pointer;background:${a===ano?'var(--tx)':'var(--sf)'};color:${a===ano?'#fff':'var(--tx2)'}">${a}</button>`).join('')}
+          </div>
+          <button class="btn" onclick="limparPlano(${ano})" style="font-size:11px">Limpar ${ano}</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 250px;gap:16px;align-items:start">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${grade}</div>
+        <div style="background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden;position:sticky;top:70px">
+          <div style="padding:10px 14px;background:var(--sf2);border-bottom:1px solid var(--bd);font-size:11px;font-weight:600">Resumo por funcionário</div>
+          ${resumoFuncs||'<div style="padding:14px;font-size:11px;color:var(--tx3)">Nenhum funcionário com saldo.</div>'}
+        </div>
+      </div>
+    </div>`;
   }
 
   window.adicionarAoMes=function(sel,mesKey){
     const fid=sel.value;if(!fid)return;
     if(!plano[mesKey])plano[mesKey]=[];
-    if(!plano[mesKey].includes(fid))plano[mesKey].push(fid);
+    if(!plano[mesKey].find(e=>e.fid===fid))plano[mesKey].push({fid,dias:0,venda:false});
     salvarPlano();sel.value='';renderizar();
   };
-  window.removerDoMes=function(fid,mesKey){
+  window.removerDoMes=function(fid,mesKey,idx){
     if(!plano[mesKey])return;
-    plano[mesKey]=plano[mesKey].filter(x=>x!==fid);
+    plano[mesKey].splice(idx,1);
+    salvarPlano();renderizar();
+  };
+  window.atualizarDias=function(fid,mesKey,idx,val){
+    if(!plano[mesKey]||!plano[mesKey][idx])return;
+    plano[mesKey][idx].dias=parseInt(val)||0;
+    salvarPlano();renderizar();
+  };
+  window.toggleVenda=function(fid,mesKey,idx,checked){
+    if(!plano[mesKey]||!plano[mesKey][idx])return;
+    plano[mesKey][idx].venda=checked;
     salvarPlano();renderizar();
   };
   window.limparPlano=function(a){
