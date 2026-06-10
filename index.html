@@ -124,6 +124,7 @@ tbody td{padding:9px 12px;vertical-align:middle}
     <div class="nlbl">Férias</div>
     <button class="ni" onclick="go('ferias')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l3-8 4 6 3-4 4 6"/><path d="M21 12c0 4.97-4.03 9-9 9S3 16.97 3 12"/></svg>Programação</button>
     <button class="ni" onclick="go('lancar')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="12" y1="14" x2="12" y2="18"/><line x1="10" y1="16" x2="14" y2="16"/></svg>Lançar gozo</button>
+    <button class="ni" onclick="go('planejador')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="15" x2="17" y2="15"/></svg>Planejador</button>
   </div>
   <div class="nsec">
     <div class="nlbl">Documentos</div>
@@ -222,7 +223,7 @@ tbody td{padding:9px 12px;vertical-align:middle}
     <div class="srow" id="fstats"></div>
     <div class="fbar">
       <input type="text" id="ferS" placeholder="Buscar funcionário..." oninput="rFer()">
-      <select id="ferSt" onchange="rFer()"><option value="">Todos</option><option value="vencida">Vencida</option><option value="alerta">Próx. vencimento</option><option value="gozo">Em gozo</option><option value="ok">Em dia</option></select>
+      <select id="ferSt" onchange="rFer()"><option value="">Todos</option><option value="vencida">Vencida</option><option value="alerta">Próx. vencimento</option><option value="acumulado">Acumulado</option><option value="gozo">Em gozo</option><option value="ok">Em dia</option></select>
       <div class="mla" style="display:flex;gap:7px">
         <button class="btn" onclick="expFer()">Exportar CSV</button>
         <button class="btn btn-g" onclick="go('lancar')">Lançar gozo</button>
@@ -337,6 +338,11 @@ tbody td{padding:9px 12px;vertical-align:middle}
       </div>
     </div>
   </div>
+  <!-- PLANEJADOR -->
+  <div class="page" id="page-planejador">
+    <div id="plan-content"></div>
+  </div>
+
 </main>
 <div class="toast" id="toast"></div>
 
@@ -394,6 +400,8 @@ function cP(p,fid){
   return{s:'ok',l:'Em dia',sd};
 }
 function wS(f){const o={vencida:0,alerta:1,gozo:2,ok:3};let w='ok';(f.periodos||[]).forEach(p=>{const s=cP(p,f.id).s;if(o[s]<o[w])w=s;});return w;}
+function isAcum(f){return(f.periodos||[]).filter(p=>cP(p,f.id).sd>0).length>1;}
+function totalSaldo(f){return(f.periodos||[]).reduce((s,p)=>s+cP(p,f.id).sd,0);}
 
 // ═══════════════════ NAVEGAÇÃO ═══════════════════
 const PM={
@@ -405,6 +413,7 @@ const PM={
   'lancar':{t:'Lançar gozo de férias',s:''},
   'holerites':{t:'Holerites',s:'Recibos de pagamento por funcionário'},
   'importar':{t:'Importar PDFs da contabilidade',s:'Leitura local — sem internet, sem custo'},
+  'planejador':{t:'Planejador de Férias',s:'Organize estrategicamente as férias por mês'},
 };
 
 function go(p,param){
@@ -420,6 +429,7 @@ function go(p,param){
   if(p==='ferias')rFer();
   if(p==='lancar')rLan();
   if(p==='holerites')rHol();
+  if(p==='planejador')rPlan();
   if(p==='ficha'&&param)rFicha(param);
   if(p==='novo-func'){param?fillF(param):clrF();document.getElementById('ttl').textContent=param?'Editar funcionário':'Novo funcionário';}
   window.scrollTo(0,0);
@@ -499,13 +509,16 @@ function delF(id){const f=funcs.find(x=>x.id===id);if(!f||!confirm(`Excluir ${f.
 function rFer(){
   const sr=(document.getElementById('ferS').value||'').toLowerCase();const fs=document.getElementById('ferSt').value;
   const o={vencida:0,alerta:1,gozo:2,ok:3};
-  const list=funcs.filter(f=>{if(sr&&!f.nome.toLowerCase().includes(sr))return false;if(fs&&wS(f)!==fs)return false;return true;}).sort((a,b)=>o[wS(a)]-o[wS(b)]);
-  let v=0,al=0,g=0,ok=0;funcs.forEach(f=>{const s=wS(f);if(s==='vencida')v++;else if(s==='alerta')al++;else if(s==='gozo')g++;else ok++;});
-  document.getElementById('fstats').innerHTML=`<div class="sc"><div class="slbl">Total</div><div class="sval">${funcs.length}</div></div><div class="sc"><div class="slbl">Vencidas</div><div class="sval r">${v}</div></div><div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${al}</div></div><div class="sc"><div class="slbl">Em gozo</div><div class="sval b">${g}</div></div><div class="sc"><div class="slbl">Em dia</div><div class="sval g">${ok}</div></div>`;
+  const list=funcs.filter(f=>{if(sr&&!f.nome.toLowerCase().includes(sr))return false;if(fs==='acumulado'){if(!isAcum(f))return false;}else if(fs&&wS(f)!==fs)return false;return true;}).sort((a,b)=>o[wS(a)]-o[wS(b)]);
+  let v=0,al=0,g=0,ok=0,ac2=0;funcs.forEach(f=>{const s=wS(f);if(s==='vencida')v++;else if(s==='alerta')al++;else if(s==='gozo')g++;else ok++;if(isAcum(f))ac2++;});
+  document.getElementById('fstats').innerHTML=`<div class="sc"><div class="slbl">Total</div><div class="sval">${funcs.length}</div></div><div class="sc"><div class="slbl">Vencidas</div><div class="sval r">${v}</div></div><div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${al}</div></div><div class="sc" style="border-color:var(--am)"><div class="slbl">Acumuladas</div><div class="sval a">${ac2}</div></div><div class="sc"><div class="slbl">Em gozo</div><div class="sval b">${g}</div></div><div class="sc"><div class="slbl">Em dia</div><div class="sval g">${ok}</div></div>`;
   const tb=document.getElementById('fertbody');
   if(!list.length){tb.innerHTML=`<tr><td colspan="7"><div class="empty"><p>Nenhum resultado.</p></div></td></tr>`;return;}
-  tb.innerHTML=list.map(f=>(f.periodos||[]).map((p,i)=>{const s=cP(p,f.id);return`<tr>${i===0?`<td rowspan="${f.periodos.length}" style="vertical-align:top;padding-top:10px"><div style="font-weight:500">${f.nome}</div><div style="font-size:10px;color:var(--tx3)">${f.cargo||''}</div></td>`:''}${i===0?`<td rowspan="${f.periodos.length}" style="vertical-align:top;padding-top:10px;font-size:11px;color:var(--tx2)">${f.id}</td>`:''}${i===0?`<td rowspan="${f.periodos.length}" style="vertical-align:top;padding-top:10px;font-size:11px">${fd(f.admissao)}</td>`:''}
-      <td style="font-size:11px">${fd(p.ini)} – ${fd(p.fim)}</td><td style="font-size:11px">${fd(p.limite)}</td><td style="font-weight:600;text-align:center">${s.sd>0?s.sd:'—'}</td><td><span class="badge b${s.s}">${s.l}</span></td></tr>`;}).join('')).join('');
+  tb.innerHTML=list.map(f=>{
+    const acum=isAcum(f);const tot=totalSaldo(f);
+    const rowBg=acum?'background:#FFFBEB;':'';
+    return(f.periodos||[]).map((p,i)=>{const s=cP(p,f.id);return`<tr style="${rowBg}">${i===0?`<td rowspan="${f.periodos.length}" style="vertical-align:top;padding-top:10px"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-weight:500">${f.nome}</span>${acum?`<span class="badge" style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A">⚠ ${tot}d acumulados</span>`:''}</div><div style="font-size:10px;color:var(--tx3);margin-top:2px">${f.cargo||''}</div></td>`:''}${i===0?`<td rowspan="${f.periodos.length}" style="vertical-align:top;padding-top:10px;font-size:11px;color:var(--tx2)">${f.id}</td>`:''}${i===0?`<td rowspan="${f.periodos.length}" style="vertical-align:top;padding-top:10px;font-size:11px">${fd(f.admissao)}</td>`:''}
+      <td style="font-size:11px">${fd(p.ini)} – ${fd(p.fim)}</td><td style="font-size:11px">${fd(p.limite)}</td><td style="font-weight:600;text-align:center">${s.sd>0?s.sd:'—'}</td><td><span class="badge b${s.s}">${s.l}</span></td></tr>`;}).join('');}).join('');
 }
 
 // ═══════════════════ GOZO ═══════════════════
@@ -989,6 +1002,98 @@ function extrairHolerite(pag){
   if(!h.liquido&&h.salario_bruto>0){const td=h.verbas.filter(v=>v.tipo==='desconto').reduce((s,v)=>s+v.valor,0);if(td>0)h.liquido=Math.round((h.salario_bruto-td)*100)/100;}
 
   return h.nome?h:null;
+}
+
+// ═══════════════════ PLANEJADOR DE FÉRIAS ═══════════════════
+function rPlan(){
+  const ano=new Date().getFullYear();
+  const MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  // Funcionários com saldo > 0 (precisam de férias)
+  const comSaldo=funcs.filter(f=>totalSaldo(f)>0&&f.status!=='Inativo');
+
+  // Carrega planejamento salvo
+  let plano=JSON.parse(localStorage.getItem('dp4_plano')||'{}');
+
+  function salvarPlano(){localStorage.setItem('dp4_plano',JSON.stringify(plano));}
+
+  function renderizar(){
+    const el=document.getElementById('plan-content');
+
+    // Resumo de atenção
+    const acums=comSaldo.filter(f=>isAcum(f));
+    const vencidas=comSaldo.filter(f=>wS(f)==='vencida');
+    const alertas=comSaldo.filter(f=>wS(f)==='alerta');
+
+    let avisos='';
+    if(vencidas.length)avisos+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--rd-bg);border-radius:var(--r);margin-bottom:8px;font-size:12px;color:var(--rd-tx)"><strong>🔴 ${vencidas.length} funcionário(s) com férias VENCIDAS:</strong> ${vencidas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
+    if(acums.length)avisos+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--r);margin-bottom:8px;font-size:12px;color:#92400E"><strong>⚠ ${acums.length} funcionário(s) com férias ACUMULADAS:</strong> ${acums.map(f=>f.nome.split(' ')[0]+' ('+totalSaldo(f)+'d)').join(', ')}</div>`;
+    if(alertas.length)avisos+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--am-bg);border-radius:var(--r);margin-bottom:16px;font-size:12px;color:var(--am-tx)"><strong>🟡 ${alertas.length} funcionário(s) com vencimento próximo:</strong> ${alertas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
+
+    // Grade de meses
+    let grade='';
+    for(let m=0;m<12;m++){
+      const mesKey=`${ano}-${String(m+1).padStart(2,'0')}`;
+      const planejados=(plano[mesKey]||[]);
+      const tags=planejados.map(fid=>{
+        const f=funcs.find(x=>x.id===fid);
+        if(!f)return'';
+        const c=ac(f.nome);
+        const acumF=isAcum(f);
+        return`<div style="display:flex;align-items:center;gap:4px;background:${acumF?'#FEF3C7':c.bg};border:1px solid ${acumF?'#FDE68A':c.bg};border-radius:5px;padding:3px 7px;font-size:11px;font-weight:500;color:${acumF?'#92400E':c.fg}">
+          ${f.nome.split(' ')[0]}${f.nome.split(' ').length>1?' '+f.nome.split(' ').slice(-1)[0]:''}
+          <button onclick="removerDoMes('${fid}','${mesKey}')" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.6;padding:0;line-height:1;font-size:13px">×</button>
+        </div>`;
+      }).join('');
+
+      // Funcionários não planejados neste mês
+      const disponiveis=comSaldo.filter(f=>!(plano[mesKey]||[]).includes(f.id));
+      const opts=disponiveis.map(f=>`<option value="${f.id}">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]} (${totalSaldo(f)}d${isAcum(f)?'⚠':''})</option>`).join('');
+
+      grade+=`<div style="background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden">
+        <div style="padding:10px 12px;background:var(--sf2);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:600">${MESES_FULL[m]} ${ano}</span>
+          <span style="font-size:10px;color:var(--tx3)">${planejados.length} funcionário(s)</span>
+        </div>
+        <div style="padding:10px 12px;min-height:60px">
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:${disponiveis.length?'8':'0'}px">${tags||'<span style="font-size:11px;color:var(--tx3)">Nenhum planejado</span>'}</div>
+          ${disponiveis.length?`<select onchange="adicionarAoMes(this,'${mesKey}')" style="width:100%;font-size:11px;padding:4px 7px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx)"><option value="">+ Adicionar funcionário...</option>${opts}</select>`:''}
+        </div>
+      </div>`;
+    }
+
+    el.innerHTML=`
+      <div style="margin-bottom:16px">
+        ${avisos}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+          <div>
+            <div style="font-size:13px;font-weight:600">Planejamento ${ano}</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:2px">Distribua os funcionários nos meses para organizar as férias</div>
+          </div>
+          <button class="btn" onclick="limparPlano()" style="font-size:11px">Limpar planejamento</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${grade}</div>
+      </div>`;
+  }
+
+  window.adicionarAoMes=function(sel,mesKey){
+    const fid=sel.value;if(!fid)return;
+    if(!plano[mesKey])plano[mesKey]=[];
+    if(!plano[mesKey].includes(fid))plano[mesKey].push(fid);
+    salvarPlano();sel.value='';renderizar();
+  };
+  window.removerDoMes=function(fid,mesKey){
+    if(!plano[mesKey])return;
+    plano[mesKey]=plano[mesKey].filter(x=>x!==fid);
+    salvarPlano();renderizar();
+  };
+  window.limparPlano=function(){
+    if(!confirm('Limpar todo o planejamento?'))return;
+    plano={};salvarPlano();renderizar();
+  };
+
+  renderizar();
 }
 
 function analisarTextoFerias(){
