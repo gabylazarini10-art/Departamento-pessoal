@@ -289,6 +289,13 @@ tbody td{padding:9px 12px;vertical-align:middle}
             <div class="lbar-wrap"><div class="lbar" id="fer-bar"></div></div>
           </div>
           <div id="fer-result"></div>
+          <div style="margin-top:14px">
+            <div style="font-size:11px;color:var(--tx2);margin-bottom:6px;display:flex;align-items:center;gap:6px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+              Ou cole o texto do PDF aqui (Ctrl+A → Ctrl+C no PDF → cole abaixo)
+            </div>
+            <textarea id="fer-txt" placeholder="Cole o texto do PDF de férias aqui..." style="width:100%;min-height:100px;padding:8px 10px;font-size:11px;font-family:monospace;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx);resize:vertical;outline:none" oninput="analisarTextoFerias()"></textarea>
+          </div>
         </div>
       </div>
 
@@ -714,9 +721,19 @@ function processarFerias(texto,pfx){
   if(!lista.length){mostrarErro(pfx,'Não foi possível identificar funcionários. Verifique se é o PDF correto da BS Assessoria.');return;}
   let novos=0,atu=0,semAlt=[];
   lista.forEach(item=>{
-    const ex=funcs.find(f=>f.id===item.id||norm(f.nome)===norm(item.nome));
-    if(!ex){funcs.push({id:item.id,nome:item.nome,admissao:item.admissao,periodos:item.periodos.map(p=>({...p})),cpf:'',rg:'',nasc:'',sexo:'',ec:'',end:'',tel:'',email:'',sal:'',cont:'CLT',pis:'',ctps:'',banco:'',ag:'',cc:'',obs:'',status:'Ativo',dfer:30,cargo:'',setor:''});novos++;}
-    else{const idx=funcs.findIndex(f=>f.id===ex.id);let mudou=false;item.periodos.forEach(p=>{const jt=(funcs[idx].periodos||[]).find(ep=>ep.ini===p.ini);if(!jt){funcs[idx].periodos.push({...p});mudou=true;}else{jt.saldo=p.saldo;jt.limite=p.limite;jt.fim=p.fim;mudou=true;}});if(mudou)atu++;else semAlt.push(ex.nome);}
+    // Busca SOMENTE por nome — códigos podem repetir entre empresas diferentes
+    const ex=funcs.find(f=>norm(f.nome)===norm(item.nome));
+    if(!ex){
+      let newId=item.id;
+      if(funcs.find(f=>f.id===newId))newId=item.id+'x'+Date.now()%10000;
+      funcs.push({id:newId,nome:item.nome,admissao:item.admissao,periodos:item.periodos.map(p=>({...p})),cpf:'',rg:'',nasc:'',sexo:'',ec:'',end:'',tel:'',email:'',sal:'',cont:'CLT',pis:'',ctps:'',banco:'',ag:'',cc:'',obs:'',status:'Ativo',dfer:30,cargo:'',setor:''});
+      novos++;
+    }else{
+      const idx=funcs.findIndex(f=>norm(f.nome)===norm(item.nome));
+      let mudou=false;
+      item.periodos.forEach(p=>{const jt=(funcs[idx].periodos||[]).find(ep=>ep.ini===p.ini);if(!jt){funcs[idx].periodos.push({...p});mudou=true;}else{jt.saldo=p.saldo;jt.limite=p.limite;jt.fim=p.fim;mudou=true;}});
+      if(mudou)atu++;else semAlt.push(ex.nome);
+    }
   });
   sv();setBar(pfx,100,'');
   document.getElementById('fer-label').textContent='✓ PDF importado com sucesso';
@@ -789,113 +806,130 @@ function processarHolerites(texto,pfx){
 }
 
 function extrairHolerite(pag){
-  // Trabalha com texto plano completo da página (embaralhado pelo pdf.js)
+  // O pdf.js extrai itens fora de ordem visual. Usamos o texto plano completo.
+  // O formato real do texto colado do BS é:
+  // "... 2027 Código GABRIELA LAZARINI Nome do Funcionário CBO 411005 ...
+  //  Maio de 2026 ... AUXILIAR ADMINISTRATIVO Admissão: 11/02/2022 ...
+  //  Total de Vencimentos ... 3.245,15 ... Valor Líquido ... 2.967,00 ...
+  //  Total de Descontos ... 278,15 ... F.G.T.S do Mês ... 259,60 ..."
   const txt=pag.replace(/\n/g,' ').replace(/\s{2,}/g,' ');
   const h={nome:'',id:'',cargo:'',admissao:'',competencia:'',salario_bruto:0,inss:0,irrf:0,fgts:0,outros_descontos:0,outros_proventos:0,liquido:0,verbas:[]};
 
-  // ── Competência: "Maio de 2026" ──
-  const MESES={janeiro:'01',fevereiro:'02','março':'03',marco:'03',abril:'04',maio:'05',junho:'06',julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12'};
+  // ── Competência ──
+  const MESES={janeiro:'01',fevereiro:'02',marco:'03',abril:'04',maio:'05',junho:'06',julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12'};
   const mComp=txt.match(/\b(Janeiro|Fevereiro|Mar[çc]o|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)\s+de\s+(\d{4})\b/i);
-  if(mComp){const mn=norm(mComp[1]);h.competencia=(MESES[mn]||'00')+'/'+mComp[2];}
+  if(mComp){const mn=norm(mComp[1]).replace(/[^a-z]/g,'');h.competencia=(MESES[mn]||'00')+'/'+mComp[2];}
 
-  // ── Nome: aparece logo após o código numérico antes de "Nome do Funcionário CBO" ──
-  // Padrão BS: "2027 Código GABRIELA LAZARINI Nome do Funcionário CBO"
-  // ou o nome aparece entre o código e "CBO"
-  const mNome=txt.match(/\b(\d{1,6})\s+(?:C[oó]digo\s+)?([A-Z][A-Z\s]{5,60}?)\s+Nome\s+do\s+Funcion/i);
-  if(mNome){h.id=mNome[1];h.nome=mNome[2].trim().replace(/\s+/g,' ');}
-
-  // Fallback nome: entre "Código" e "Nome do Funcionário"
+  // ── Nome + ID: padrão "NUMERO Código NOME Nome do Funcionário" ──
+  // Variações: com ou sem "Código" entre o número e o nome
+  const reNome=/\b(\d{1,6})\s+(?:C[oó]digo\s+)?([A-Z][A-Z\s]{4,60}?)\s+Nome\s+do\s+Funcion/i;
+  const mNome=txt.match(reNome);
+  if(mNome){
+    h.id=mNome[1];
+    h.nome=mNome[2].trim().replace(/\s+/g,' ');
+  }
+  // Fallback: "Código NUMERO" separado do nome
   if(!h.nome){
-    const mN2=txt.match(/C[oó]digo\s+([A-Z][A-Z\s]{5,60}?)\s+Nome/i);
+    const mN2=txt.match(/([A-Z][A-Z\s]{6,60}?)\s+Nome\s+do\s+Funcion/i);
     if(mN2)h.nome=mN2[1].trim().replace(/\s+/g,' ');
   }
-
-  // Fallback nome: linha de maiúsculas isolada
-  if(!h.nome){
-    const linhas=pag.split('\n').map(l=>l.trim()).filter(Boolean);
-    const excluir=/HORAS|NORMAIS|EXTRAS|DESCONTO|TOTAL|BASE|FOLHA|MENSALISTA|GERAL|FILIAL|DEPARTAMENTO|SALÁRIO|VENCIMENTO|ADMINIST|ASSESSORIA|LAZARINI\s*$/i;
-    for(const l of linhas){
-      if(/^[A-Z][A-Z\s]{8,}$/.test(l)&&!excluir.test(l)&&l.split(' ').length>=2){
-        h.nome=l.trim();break;
-      }
-    }
-  }
-
-  // ── ID fallback ──
   if(!h.id){
-    const mId=txt.match(/\b(\d{3,6})\s+C[oó]digo\b/i)||txt.match(/C[oó]digo\s+(\d{3,6})\b/i);
+    const mId=txt.match(/C[oó]digo\s+(\d{1,6})\b/i)||txt.match(/\b(\d{3,6})\s+C[oó]digo\b/i);
     if(mId)h.id=mId[1];
   }
 
-  // ── Cargo: busca por cargo conhecido ou padrão "CARGO Admissão" ──
-  const mCargo=txt.match(/\b(AUXILIAR\s+ADMINISTRATIVO|AUXILIAR\s+DE\s+ESCRIT[OÓ]RIO|OPERADOR\s+DE\s+MAQUINAS\s+II|GERENTE\s+DE\s+PRODU[CÇ][AÃ]O|GERENTE|MOTORISTA|TRABALHADOR\s+RURAL\s+POLIVALENTE\s+I|COZINHEIRA|APLICADOR\s+DE\s+DEFENSIVOS)\b/i);
-  if(mCargo)h.cargo=mCargo[1].trim();
+  // ── Cargo: qualquer texto antes de "Admissão:" ──
+  const mCargo=txt.match(/([A-Z][A-Z\s]{4,50}?)\s+Admiss[ãa]o/i);
+  if(mCargo){
+    const c=mCargo[1].trim().replace(/\s+/g,' ');
+    // Filtra palavras que não são cargo
+    if(!/MENSALISTA|GERAL|FOLHA|FILIAL|CBO|CPF|CNPJ/i.test(c))h.cargo=c;
+  }
 
   // ── Admissão ──
   const mAdm=txt.match(/Admiss[ãa]o[:\s]+(\d{2}\/\d{2}\/\d{4})/i);
   if(mAdm)h.admissao=pBR(mAdm[1]);
 
-  // ── Valores principais ──
-  // "Total de Vencimentos" → primeiro número grande após essa expressão
-  const mBruto=txt.match(/Total\s+de\s+Vencimentos\s+([\d.]+,\d{2})/i);
+  // ── Valores: Total de Vencimentos, Valor Líquido, Total de Descontos, FGTS ──
+  // No texto real: "Total de Vencimentos Valor Líquido Total de Descontos ... 3.245,15 278,15 2.967,00"
+  // Os valores aparecem DEPOIS dos labels, mas podem estar agrupados.
+  // Estratégia robusta: pega todos os valores monetários grandes da página
+  // e associa pelos labels mais próximos.
+  
+  // Busca direta label + valor (funciona quando não embaralhado)
+  const mBruto=txt.match(/Total\s+de\s+Vencimentos\s+(?:Valor[\s\S]{0,30}?)?([\d]{1,3}(?:\.\d{3})+,\d{2}|\d{3,},\d{2})/i);
   if(mBruto)h.salario_bruto=pNum(mBruto[1]);
 
-  const mLiq=txt.match(/Valor\s+L[ií]quido\s+([\d.]+,\d{2})/i);
+  const mLiq=txt.match(/Valor\s+L[ií]quido\s+(?:[\s\S]{0,50}?)?([\d]{1,3}(?:\.\d{3})+,\d{2}|[1-9]\d{2,},\d{2})/i);
   if(mLiq)h.liquido=pNum(mLiq[1]);
 
-  const mFgts=txt.match(/F\.G\.T\.S\s+do\s+M[eê]s\s+([\d.]+,\d{2})/i);
+  const mFgts=txt.match(/F\.G\.T\.S\s+do\s+M[eê]s[\s\S]{0,30}?([\d]{1,3}(?:\.\d{3})+,\d{2}|\d{2,},\d{2})/i);
   if(mFgts)h.fgts=pNum(mFgts[1]);
 
-  // ── Verbas: busca todos os padrões "CÓDIGO DESCRICAO ... VALOR" no texto ──
-  // O pdf.js embaralha as colunas, então as verbas aparecem de formas variadas.
-  // Estratégia: busca o código + descrição conhecidos e o valor mais próximo.
-  const VERBAS_DEF=[
-    {cod:'1',   desc:'Horas Normais',           tipo:'provento'},
-    {cod:'150', desc:'Horas Extras 50%',         tipo:'provento'},
-    {cod:'200', desc:'Horas Extras 100%',         tipo:'provento'},
-    {cod:'201', desc:'Produtividade',             tipo:'provento'},
-    {cod:'212', desc:'Reflexo Comissões DSR',     tipo:'provento'},
-    {cod:'216', desc:'Gratificação de Função 40%',tipo:'provento'},
-    {cod:'250', desc:'Reflexo Extras DSR',        tipo:'provento'},
-    {cod:'16',  desc:'Insalubridade 20%',         tipo:'provento'},
-    {cod:'992', desc:'Arredondamento',            tipo:'desconto'},
-    {cod:'993', desc:'Troco Mês Anterior',        tipo:'desconto'},
-    {cod:'998', desc:'I.N.S.S.',                  tipo:'desconto', campo:'inss'},
-    {cod:'999', desc:'Imposto de Renda',          tipo:'desconto', campo:'irrf'},
-    {cod:'8111',desc:'Desconto Plano de Saúde',   tipo:'desconto'},
+  // Fallback: se não achou bruto/líquido pelos labels, pega os maiores valores da página
+  if(!h.salario_bruto||!h.liquido){
+    const todosValores=[...txt.matchAll(/\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/g)]
+      .map(m=>pNum(m[1])).filter(v=>v>200).sort((a,b)=>b-a);
+    if(!h.salario_bruto&&todosValores[0])h.salario_bruto=todosValores[0];
+    // Líquido costuma ser o segundo maior ou terceiro
+    if(!h.liquido&&todosValores.length>=2){
+      // Evita pegar o mesmo valor duas vezes
+      const liqCandidato=todosValores.find(v=>v!==h.salario_bruto&&v<h.salario_bruto);
+      if(liqCandidato)h.liquido=liqCandidato;
+    }
+  }
+
+  // ── Verbas: busca por código + descrição no texto ──
+  // Padrão real: "998 I.N.S.S. ... 277,98" ou "1 HORAS NORMAIS ... 3.245,00"
+  const VERBAS=[
+    {cod:'1',   nome:'Horas Normais',            tipo:'provento'},
+    {cod:'16',  nome:'Insalubridade 20%',         tipo:'provento'},
+    {cod:'150', nome:'Horas Extras 50%',          tipo:'provento'},
+    {cod:'200', nome:'Horas Extras 100%',         tipo:'provento'},
+    {cod:'201', nome:'Produtividade',             tipo:'provento'},
+    {cod:'212', nome:'Reflexo Comissões DSR',     tipo:'provento'},
+    {cod:'216', nome:'Gratificação de Função 40%',tipo:'provento'},
+    {cod:'250', nome:'Reflexo Extras DSR',        tipo:'provento'},
+    {cod:'992', nome:'Arredondamento',            tipo:'desconto'},
+    {cod:'993', nome:'Troco Mês Anterior',        tipo:'desconto'},
+    {cod:'998', nome:'I.N.S.S.',                  tipo:'desconto', campo:'inss'},
+    {cod:'999', nome:'Imposto de Renda',          tipo:'desconto', campo:'irrf'},
+    {cod:'8111',nome:'Plano de Saúde',            tipo:'desconto'},
   ];
 
-  // Encontra cada verba pelo código no texto
-  VERBAS_DEF.forEach(vd=>{
-    // Padrão: código + espaço + começo da descrição (pode estar embaralhado)
-    const reVb=new RegExp('\\b'+vd.cod+'\\s+(?:[A-Z%.\\s]{3,40}?)\\s*(\\d{1,2}\\.\\d{3},\\d{2}|\\d{1,3},\\d{2})','i');
-    const mv=txt.match(reVb);
+  VERBAS.forEach(vd=>{
+    // Busca o código seguido (eventualmente) da descrição e de um valor
+    const re=new RegExp('(?:^|\\s)'+vd.cod+'(?:\\s+[A-Z%.\\s\\.N]{2,30}?)?\\s+(\\d{1,3}(?:\\.\\d{3})*,\\d{2})','i');
+    const mv=txt.match(re);
     if(mv){
       const val=pNum(mv[1]);
-      if(val>0){
-        // Evita duplicata
-        if(!h.verbas.find(v=>v.nome===vd.desc)){
-          h.verbas.push({nome:vd.desc,tipo:vd.tipo,valor:val});
-          if(vd.campo==='inss')h.inss=val;
-          else if(vd.campo==='irrf')h.irrf=val;
-          else if(vd.tipo==='desconto'&&vd.cod!=='992'&&vd.cod!=='993')h.outros_descontos+=val;
-        }
+      if(val>0&&!h.verbas.find(v=>v.nome===vd.nome)){
+        h.verbas.push({nome:vd.nome,tipo:vd.tipo,valor:val});
+        if(vd.campo==='inss')h.inss=val;
+        else if(vd.campo==='irrf')h.irrf=val;
+        else if(vd.tipo==='desconto'&&!['992','993'].includes(vd.cod))h.outros_descontos+=val;
       }
     }
   });
 
-  // Se não encontrou salário bruto pelo label, soma proventos das verbas
+  // Se bruto ainda não foi encontrado, soma proventos
   if(!h.salario_bruto){
     const tp=h.verbas.filter(v=>v.tipo==='provento').reduce((s,v)=>s+v.valor,0);
     if(tp>0)h.salario_bruto=tp;
   }
-  // Se não encontrou líquido, calcula
   if(!h.liquido&&h.salario_bruto>0){
     const td=h.verbas.filter(v=>v.tipo==='desconto').reduce((s,v)=>s+v.valor,0);
-    h.liquido=h.salario_bruto-td;
+    if(td>0)h.liquido=h.salario_bruto-td;
   }
 
   return h.nome?h:null;
+}
+
+function analisarTextoFerias(){
+  const txt=document.getElementById('fer-txt').value.trim();
+  if(!txt)return;
+  processarFerias(txt,'fer');
+  document.getElementById('fer-txt').value='';
 }
 
 rD();
