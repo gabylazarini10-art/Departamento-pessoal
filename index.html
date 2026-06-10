@@ -935,6 +935,21 @@ function extrairHolerite(pag){
 
   return h.nome?h:null;
 }
+
+function analisarTextoFerias(){
+  const txt=document.getElementById('fer-txt').value.trim();
+  if(txt.length<50)return;
+  processarFerias(txt,'fer');
+  document.getElementById('fer-txt').value='';
+}
+
+function analisarTextoHolerites(){
+  const txt=document.getElementById('hol-txt').value.trim();
+  if(txt.length<50)return;
+  processarHolerites(txt,'hol');
+  document.getElementById('hol-txt').value='';
+}
+
 rD();
 </script>
 </body>
