@@ -369,9 +369,56 @@ let lancs=JSON.parse(localStorage.getItem('dp4_l')||'[]');
 let hols=JSON.parse(localStorage.getItem('dp4_h')||'[]');
 const HOJE=new Date();
 
-if(!funcs){funcs=DI.map(f=>({...f,cpf:'',rg:'',nasc:'',sexo:'',ec:'',end:'',tel:'',email:'',sal:'',cont:'CLT',pis:'',ctps:'',banco:'',ag:'',cc:'',obs:'',status:'Ativo',dfer:30}));sv();}
+if(!funcs){funcs=DI.map(f=>({...f,cpf:'',rg:'',nasc:'',sexo:'',ec:'',end:'',tel:'',email:'',sal:'',cont:'CLT',pis:'',ctps:'',banco:'',ag:'',cc:'',obs:'',status:'Ativo',dfer:30}));}
 
-function sv(){localStorage.setItem('dp4_f',JSON.stringify(funcs));localStorage.setItem('dp4_l',JSON.stringify(lancs));localStorage.setItem('dp4_h',JSON.stringify(hols));}
+// ═══════════════════ GITHUB SYNC ═══════════════════
+const GH_TOKEN = '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';
+const GH_REPO = 'gabylazarini10-art/Departamento-pessoal';
+const GH_FILE = 'dados.json';
+const GH_API = `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`;
+
+let _ghSha = null;
+let _syncTimer = null;
+let _carregando = false;
+
+async function ghLoad() {
+  try {
+    const r = await fetch(GH_API, {
+      headers: {'Authorization':`token ${GH_TOKEN}`,'Accept':'application/vnd.github.v3+json'}
+    });
+    if(r.status===404) return null;
+    const j = await r.json();
+    _ghSha = j.sha;
+    return JSON.parse(atob(j.content.replace(/\n/g,'')));
+  } catch(e){ console.warn('ghLoad erro:',e); return null; }
+}
+
+async function ghSave(data) {
+  const conteudo = JSON.stringify(data);
+  const encoded = btoa(unescape(encodeURIComponent(conteudo)));
+  const body = {
+    message: 'DP ' + new Date().toLocaleString('pt-BR'),
+    content: encoded,
+    ...(_ghSha ? {sha:_ghSha} : {})
+  };
+  try {
+    const r = await fetch(GH_API, {
+      method:'PUT',
+      headers:{'Authorization':`token ${GH_TOKEN}`,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if(j.content) _ghSha = j.content.sha;
+  } catch(e){ console.warn('ghSave erro:',e); }
+}
+
+function sv(){
+  localStorage.setItem('dp4_f',JSON.stringify(funcs));
+  localStorage.setItem('dp4_l',JSON.stringify(lancs));
+  localStorage.setItem('dp4_h',JSON.stringify(hols));
+  if(_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(()=>ghSave({f:funcs,l:lancs,h:hols}), 2000);
+}
 
 // ═══════════════════ UTILS ═══════════════════
 function pd(s){return s?new Date(s+'T12:00:00'):null;}
@@ -1187,7 +1234,29 @@ function analisarTextoHolerites(){
   document.getElementById('hol-txt').value='';
 }
 
-rD();
+// Carrega dados do GitHub ao iniciar
+(async function(){
+  const indicador = document.createElement('div');
+  indicador.id = 'gh-loading';
+  indicador.style = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#1D9E75;color:#fff;font-size:12px;text-align:center;padding:6px';
+  indicador.textContent = '⟳ Sincronizando dados...';
+  document.body.appendChild(indicador);
+
+  const dados = await ghLoad();
+  if(dados){
+    funcs = dados.f || funcs;
+    lancs = dados.l || lancs;
+    hols  = dados.h || hols;
+    localStorage.setItem('dp4_f',JSON.stringify(funcs));
+    localStorage.setItem('dp4_l',JSON.stringify(lancs));
+    localStorage.setItem('dp4_h',JSON.stringify(hols));
+  }
+
+  indicador.textContent = '✓ Sincronizado';
+  indicador.style.background = '#0F6E56';
+  setTimeout(()=>indicador.remove(), 1500);
+  rD();
+})();
 </script>
 </body>
 </html>
