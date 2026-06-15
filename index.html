@@ -23,7 +23,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sfooter{margin-top:auto;padding:12px 14px;border-top:1px solid var(--bd);font-size:10px;color:var(--tx3)}
 .sfooter strong{display:block;color:var(--tx2);font-size:11px;margin-bottom:2px}
 .main{margin-left:var(--nw);flex:1;min-height:100vh;display:flex;flex-direction:column}
-.topbar{background:var(--sf);border-bottom:1px solid var(--bd);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40}
+.topbar{background:var(--sf);border-bottom:1px solid var(--bd);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;width:100%}
 .ttl{font-size:14px;font-weight:600}.tsub{font-size:11px;color:var(--tx3);margin-top:1px}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:6px 13px;font-size:12px;font-weight:500;border:1px solid var(--bd2);border-radius:var(--r);cursor:pointer;background:var(--sf);color:var(--tx);transition:all .12s;white-space:nowrap}
 .btn:hover{background:var(--bg)}.btn svg{width:13px;height:13px}
@@ -366,6 +366,23 @@ tbody td{padding:9px 12px;vertical-align:middle}
   <!-- PLANEJADOR -->
   <div class="page" id="page-planejador">
     <div id="plan-content"></div>
+  </div>
+
+  <!-- ASOs -->
+  <div class="page" id="page-asos">
+    <div id="aso-stats" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px"></div>
+    <div class="fbar">
+      <input type="text" id="aso-s" placeholder="Buscar funcionário..." oninput="rAsos()">
+      <select id="aso-st" onchange="rAsos()">
+        <option value="">Todos</option>
+        <option value="vencido">Vencido</option>
+        <option value="alerta">Próx. vencimento</option>
+        <option value="ok">Em dia</option>
+        <option value="sem">Sem registro</option>
+      </select>
+      <div class="mla"><button class="btn btn-p" onclick="abrirModalAso()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Registrar ASO</button></div>
+    </div>
+    <div id="aso-list"></div>
   </div>
 
 </main>
@@ -1341,17 +1358,20 @@ function extrairHolerite(pag){
 function rPlan(anoSel){
   const anoAtual=new Date().getFullYear();
   const ano=anoSel||anoAtual;
-  const anos=[anoAtual, anoAtual+1, anoAtual+2];
+  const anos=[anoAtual,anoAtual+1,anoAtual+2];
   const MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   const comSaldo=funcs.filter(f=>totalSaldo(f)>0&&f.status!=='Inativo');
 
-  // plano[mesKey] = [{fid, dias, venda}]
+  // plano[mesKey] = [{fid, ini, fim, dias, venda}]
   let plano=JSON.parse(localStorage.getItem('dp4_plano2')||'{}');
-  // migra formato antigo (array de strings)
+  // migra formato antigo
   Object.keys(plano).forEach(k=>{
-    if(plano[k].length&&typeof plano[k][0]==='string'){
-      plano[k]=plano[k].map(fid=>({fid,dias:0,venda:false}));
-    }
+    if(!plano[k].length)return;
+    plano[k]=plano[k].map(e=>{
+      if(typeof e==='string')return{fid:e,ini:null,fim:null,dias:0,venda:false};
+      if(!e.ini)return{...e,ini:null,fim:null};
+      return e;
+    });
   });
 
   function salvarPlano(){localStorage.setItem('dp4_plano2',JSON.stringify(plano));}
@@ -1367,6 +1387,20 @@ function rPlan(anoSel){
     return t;
   }
 
+  // Estado de seleção no calendário
+  const sel={fid:null,start:null,hovering:null};
+
+  function feriasNoDia(dataStr){
+    // Retorna lista de {fid, venda} que têm férias nesse dia
+    const res=[];
+    Object.values(plano).forEach(entries=>{
+      entries.forEach(e=>{
+        if(e.ini&&e.fim&&dataStr>=e.ini&&dataStr<=e.fim)res.push(e);
+      });
+    });
+    return res;
+  }
+
   function renderizar(){
     const el=document.getElementById('plan-content');
     const acums=comSaldo.filter(f=>isAcum(f));
@@ -1378,7 +1412,7 @@ function rPlan(anoSel){
     if(acums.length)avisos+=`<div style="padding:10px 14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:var(--r);margin-bottom:8px;font-size:12px;color:#92400E"><strong>⚠ ${acums.length} com férias ACUMULADAS:</strong> ${acums.map(f=>f.nome.split(' ')[0]+' ('+totalSaldo(f)+'d)').join(', ')}</div>`;
     if(alertas.length)avisos+=`<div style="padding:10px 14px;background:var(--am-bg);border-radius:var(--r);margin-bottom:16px;font-size:12px;color:var(--am-tx)"><strong>🟡 ${alertas.length} com vencimento próximo:</strong> ${alertas.map(f=>f.nome.split(' ')[0]).join(', ')}</div>`;
 
-    // Painel lateral resumo
+    // Painel lateral resumo + seletor de funcionário
     const resumoFuncs=comSaldo.map(f=>{
       const saldo=totalSaldo(f);
       const planej=diasPlanejados(f.id);
@@ -1386,9 +1420,10 @@ function rPlan(anoSel){
       const restante=saldo-planej-vendidos;
       const c=ac(f.nome);
       const pct=saldo>0?Math.min(100,Math.round((planej+vendidos)/saldo*100)):0;
-      return`<div style="padding:9px 12px;border-bottom:1px solid var(--bd)">
+      const ativo=sel.fid===f.id;
+      return`<div onclick="planSelFunc('${f.id}')" style="padding:9px 12px;border-bottom:1px solid var(--bd);cursor:pointer;background:${ativo?'var(--sf2)':'var(--sf)'};transition:background .1s" onmouseenter="this.style.background='var(--sf2)'" onmouseleave="this.style.background='${ativo?'var(--sf2)':'var(--sf)'}'">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <div class="av" style="background:${c.bg};color:${c.fg};width:24px;height:24px;font-size:9px;flex-shrink:0">${ini(f.nome)}</div>
+          <div class="av" style="background:${c.bg};color:${c.fg};width:24px;height:24px;font-size:9px;flex-shrink:0;${ativo?'outline:2px solid '+c.fg+';outline-offset:1px':''}">${ini(f.nome)}</div>
           <div style="flex:1;min-width:0;font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]}</div>
           <span style="font-size:10px;font-weight:600;color:${restante<=0?'var(--gr)':'var(--am)'};flex-shrink:0">${restante}d</span>
         </div>
@@ -1403,11 +1438,18 @@ function rPlan(anoSel){
       </div>`;
     }).join('');
 
+    // Instrução de seleção
+    const instrucao=sel.fid
+      ? (()=>{const f=funcs.find(x=>x.id===sel.fid);const c=ac(f.nome);return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--sf2);border-radius:var(--r);margin-bottom:12px;font-size:11px;color:var(--tx2)"><div class="av" style="background:${c.bg};color:${c.fg};width:22px;height:22px;font-size:9px">${ini(f.nome)}</div><span><strong>${f.nome.split(' ')[0]}</strong> selecionado — clique no dia de início no calendário${sel.start?' e depois no dia de fim':''}</span><button onclick="planSelFunc(null)" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:13px;color:var(--tx3)">×</button></div>`;})()
+      : `<div style="padding:8px 12px;background:var(--sf2);border-radius:var(--r);margin-bottom:12px;font-size:11px;color:var(--tx3)">👈 Selecione um funcionário no painel lateral e clique no calendário para definir as férias</div>`;
+
     // Grade meses
     let grade='';
     for(let m=0;m<12;m++){
       const mesKey=`${ano}-${String(m+1).padStart(2,'0')}`;
       const entradas=(plano[mesKey]||[]);
+
+      // Tags dos períodos planejados neste mês
       const tags=entradas.map((e,ei)=>{
         const f=funcs.find(x=>x.id===e.fid);if(!f)return'';
         const c=ac(f.nome);
@@ -1416,57 +1458,47 @@ function rPlan(anoSel){
         const cor=isVenda?'#7A4D0A':isAcum(f)?'#92400E':c.fg;
         const bor=isVenda||isAcum(f)?'#FDE68A':c.bg;
         const nome=f.nome.split(' ')[0]+' '+f.nome.split(' ').slice(-1)[0];
-        return`<div style="background:${bg};border:1px solid ${bor};border-radius:6px;padding:5px 8px;font-size:11px;font-weight:500;color:${cor}">
-          <div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">
-            <span>${isVenda?'💰':''}${nome}${e.dias?' · '+e.dias+'d':''}</span>
-            <button onclick="removerDoMes('${e.fid}','${mesKey}',${ei})" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.5;padding:0;line-height:1;font-size:13px;margin-left:auto">×</button>
-          </div>
-          <div style="display:flex;gap:5px;align-items:center">
-            <input type="number" min="1" max="30" value="${e.dias||''}" placeholder="dias"
-              onchange="atualizarDias('${e.fid}','${mesKey}',${ei},this.value)"
-              style="width:54px;padding:2px 5px;font-size:10px;border:1px solid ${bor};border-radius:4px;background:var(--sf);color:var(--tx)">
-            <label style="display:flex;align-items:center;gap:3px;font-size:10px;cursor:pointer;font-weight:400;white-space:nowrap">
-              <input type="checkbox" ${isVenda?'checked':''} onchange="toggleVenda('${e.fid}','${mesKey}',${ei},this.checked)" style="cursor:pointer">
-              💰 Venda
-            </label>
-          </div>
+        const periodo=e.ini&&e.fim?` · ${e.ini.split('-')[2]}/${e.fim.split('-')[2]}`:'';
+        return`<div style="background:${bg};border:1px solid ${bor};border-radius:6px;padding:5px 8px;font-size:11px;font-weight:500;color:${cor};display:flex;align-items:center;gap:4px">
+          <span style="flex:1">${isVenda?'💰':''}${nome}${e.dias?' · '+e.dias+'d':''}${periodo}</span>
+          <label style="display:flex;align-items:center;gap:3px;font-size:10px;cursor:pointer;font-weight:400;white-space:nowrap;opacity:.8">
+            <input type="checkbox" ${isVenda?'checked':''} onchange="planToggleVenda('${e.fid}','${mesKey}',${ei},this.checked)" style="cursor:pointer">💰
+          </label>
+          <button onclick="planRemover('${e.fid}','${mesKey}',${ei})" style="background:none;border:none;cursor:pointer;color:inherit;opacity:.5;padding:0;line-height:1;font-size:14px">×</button>
         </div>`;
       }).join('');
 
-      const jaEsta=entradas.map(e=>e.fid);
-      const disponiveis=comSaldo.filter(f=>!jaEsta.includes(f.id));
-      const opts=disponiveis.map(f=>{
-        const rest=totalSaldo(f)-diasPlanejados(f.id)-diasVendidos(f.id);
-        return`<option value="${f.id}">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]} (${rest}d${isAcum(f)?'⚠':''})</option>`;
-      }).join('');
-
-      // Mini calendário do mês
+      // Mini calendário interativo
       const diasNoMes=new Date(ano,m+1,0).getDate();
-      const primeiroDia=new Date(ano,m,1).getDay(); // 0=dom
+      const primeiroDia=new Date(ano,m,1).getDay();
       const hoje=new Date();
       const eMesAtual=hoje.getFullYear()===ano&&hoje.getMonth()===m;
       const diaHoje=eMesAtual?hoje.getDate():null;
-      // Monta array de dias com marcação de quem está de férias naquele dia
-      const dias=[];
+
+      const semCab=['D','S','T','Q','Q','S','S'].map(x=>`<div style="text-align:center;font-size:9px;font-weight:600;color:var(--tx3);padding:2px 0">${x}</div>`).join('');
+
+      let cells='';
+      for(let i=0;i<primeiroDia;i++)cells+=`<div></div>`;
       for(let d=1;d<=diasNoMes;d++){
         const dataStr=`${ano}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const ehFds=[0,6].includes(new Date(ano,m,d).getDay());
-        dias.push({d,dataStr,ehFds});
-      }
-      // Cabeçalhos da semana
-      const semCab=['D','S','T','Q','Q','S','S'].map(x=>`<div style="text-align:center;font-size:9px;font-weight:600;color:var(--tx3);padding:2px 0">${x}</div>`).join('');
-      // Células do calendário
-      let cells='';
-      for(let i=0;i<primeiroDia;i++)cells+=`<div></div>`;
-      for(const {d,dataStr,ehFds} of dias){
         const isHoje=d===diaHoje;
-        const bg=isHoje?'var(--tx)':ehFds?'var(--sf2)':'';
-        const cor=isHoje?'#fff':ehFds?'var(--tx3)':'var(--tx2)';
-        cells+=`<div style="text-align:center;font-size:9px;border-radius:3px;padding:2px 1px;background:${bg};color:${cor}">${d}</div>`;
+        // Verifica se há férias neste dia
+        const ferias=feriasNoDia(dataStr);
+        const temFerias=ferias.length>0;
+        const fCores=ferias.map(e=>{const fx=funcs.find(x=>x.id===e.fid);return fx?ac(fx.nome):null;}).filter(Boolean);
+        // Estilo base
+        let bg='',cor='',bord='',fw='',radius='3px';
+        if(isHoje){bg='var(--tx)';cor='#fff';fw='600';}
+        else if(temFerias){bg=fCores[0].bg;cor=fCores[0].fg;bord=`2px solid ${fCores[0].fg}`;fw='600';}
+        else if(ehFds){bg='var(--sf2)';cor='var(--tx3)';}
+        else{cor='var(--tx2)';}
+        cells+=`<div data-date="${dataStr}" onclick="planClickDia('${dataStr}')" onmouseenter="planHoverDia('${dataStr}',this)" style="text-align:center;font-size:9px;border-radius:${radius};padding:2px 1px;background:${bg};color:${cor};border:${bord||'none'};font-weight:${fw||'400'};cursor:${sel.fid?'pointer':'default'};user-select:none;transition:background .08s" title="${temFerias?ferias.map(e=>{const fx=funcs.find(x=>x.id===e.fid);return fx?fx.nome.split(' ')[0]:''}).join(', '):''}">${d}</div>`;
       }
-      const cal=`<div style="margin-bottom:8px">
+
+      const cal=`<div style="margin-bottom:8px;user-select:none">
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:2px">${semCab}</div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px">${cells}</div>
+        <div id="cal-${mesKey}" style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px">${cells}</div>
       </div>`;
 
       grade+=`<div style="background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden">
@@ -1476,18 +1508,17 @@ function rPlan(anoSel){
         </div>
         <div style="padding:10px 12px">
           ${cal}
-          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:${disponiveis.length?'8':'0'}px">${tags||'<span style="font-size:11px;color:var(--tx3)">Nenhum planejado</span>'}</div>
-          ${disponiveis.length?`<select onchange="adicionarAoMes(this,'${mesKey}')" style="width:100%;font-size:11px;padding:4px 7px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx)"><option value="">+ Adicionar funcionário...</option>${opts}</select>`:''}
+          <div style="display:flex;flex-direction:column;gap:5px">${tags||''}</div>
         </div>
       </div>`;
     }
 
     el.innerHTML=`<div style="margin-bottom:16px">
       ${avisos}
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px">
         <div>
           <div style="font-size:13px;font-weight:600">Planejamento de Férias</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Informe os dias e marque 💰 para venda de férias</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Selecione o funcionário e clique no calendário para marcar as férias</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <div style="display:flex;border:1px solid var(--bd2);border-radius:var(--r);overflow:hidden">
@@ -1496,33 +1527,85 @@ function rPlan(anoSel){
           <button class="btn" onclick="limparPlano(${ano})" style="font-size:11px">Limpar ${ano}</button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 250px;gap:16px;align-items:start">
+      ${instrucao}
+      <div style="display:grid;grid-template-columns:1fr 240px;gap:16px;align-items:start">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${grade}</div>
         <div style="background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden;position:sticky;top:70px">
-          <div style="padding:10px 14px;background:var(--sf2);border-bottom:1px solid var(--bd);font-size:11px;font-weight:600">Resumo por funcionário</div>
+          <div style="padding:10px 14px;background:var(--sf2);border-bottom:1px solid var(--bd);font-size:11px;font-weight:600">Clique para selecionar</div>
           ${resumoFuncs||'<div style="padding:14px;font-size:11px;color:var(--tx3)">Nenhum funcionário com saldo.</div>'}
         </div>
       </div>
     </div>`;
   }
 
-  window.adicionarAoMes=function(sel,mesKey){
-    const fid=sel.value;if(!fid)return;
-    if(!plano[mesKey])plano[mesKey]=[];
-    if(!plano[mesKey].find(e=>e.fid===fid))plano[mesKey].push({fid,dias:0,venda:false});
-    salvarPlano();sel.value='';renderizar();
+  // ── Interações do calendário ──
+  window.planSelFunc=function(fid){
+    sel.fid=fid;sel.start=null;sel.hovering=null;
+    renderizar();
   };
-  window.removerDoMes=function(fid,mesKey,idx){
+
+  window.planClickDia=function(dataStr){
+    if(!sel.fid)return;
+    if(!sel.start){
+      sel.start=dataStr;
+      planAtualizarCal();
+    }else{
+      // Confirma o range
+      const ini=sel.start<=dataStr?sel.start:dataStr;
+      const fim=sel.start<=dataStr?dataStr:sel.start;
+      // Calcula dias úteis (excluindo fins de semana) — ou usa dias corridos?
+      // Usa dias corridos (conforme CLT)
+      const d1=new Date(ini+'T12:00:00'),d2=new Date(fim+'T12:00:00');
+      const dias=Math.round((d2-d1)/86400000)+1;
+      // Descobre o mês do início
+      const mesKey=ini.substring(0,7);
+      if(!plano[mesKey])plano[mesKey]=[];
+      // Remove entradas antigas do mesmo funcionário que se sobreponham
+      const meses=Object.keys(plano);
+      meses.forEach(mk=>{
+        plano[mk]=plano[mk].filter(e=>!(e.fid===sel.fid&&e.ini&&e.fim&&!(e.fim<ini||e.ini>fim)));
+      });
+      plano[mesKey].push({fid:sel.fid,ini,fim,dias,venda:false});
+      salvarPlano();
+      sel.start=null;sel.hovering=null;
+      renderizar();
+    }
+  };
+
+  window.planHoverDia=function(dataStr,el2){
+    if(!sel.fid||!sel.start)return;
+    sel.hovering=dataStr;
+    planAtualizarCal();
+  };
+
+  function planAtualizarCal(){
+    if(!sel.fid||!sel.start)return;
+    const end=sel.hovering||sel.start;
+    const rangeIni=sel.start<=end?sel.start:end;
+    const rangeFim=sel.start<=end?end:sel.start;
+    const f=funcs.find(x=>x.id===sel.fid);
+    const c=f?ac(f.nome):null;
+    // Atualiza visual de todos os dias no range
+    document.querySelectorAll('[data-date]').forEach(el2=>{
+      const d=el2.dataset.date;
+      if(d>=rangeIni&&d<=rangeFim){
+        el2.style.background=c?c.bg:'var(--am-bg)';
+        el2.style.color=c?c.fg:'var(--am-tx)';
+        el2.style.fontWeight='600';
+        el2.style.borderRadius=d===rangeIni?'3px 0 0 3px':d===rangeFim?'0 3px 3px 0':'0';
+      }
+    });
+    // Marca o ponto de início
+    const startEl=document.querySelector(`[data-date="${sel.start}"]`);
+    if(startEl){startEl.style.background=c?c.fg:'var(--tx)';startEl.style.color='#fff';}
+  }
+
+  window.planRemover=function(fid,mesKey,idx){
     if(!plano[mesKey])return;
     plano[mesKey].splice(idx,1);
     salvarPlano();renderizar();
   };
-  window.atualizarDias=function(fid,mesKey,idx,val){
-    if(!plano[mesKey]||!plano[mesKey][idx])return;
-    plano[mesKey][idx].dias=parseInt(val)||0;
-    salvarPlano();renderizar();
-  };
-  window.toggleVenda=function(fid,mesKey,idx,checked){
+  window.planToggleVenda=function(fid,mesKey,idx,checked){
     if(!plano[mesKey]||!plano[mesKey][idx])return;
     plano[mesKey][idx].venda=checked;
     salvarPlano();renderizar();
@@ -1532,6 +1615,11 @@ function rPlan(anoSel){
     for(let m=1;m<=12;m++){const k=`${a}-${String(m).padStart(2,'0')}`;delete plano[k];}
     salvarPlano();renderizar();
   };
+  // Mantém compatibilidade com funções antigas
+  window.adicionarAoMes=function(){};
+  window.removerDoMes=window.planRemover;
+  window.atualizarDias=function(){};
+  window.toggleVenda=window.planToggleVenda;
 
   renderizar();
 }
@@ -1552,22 +1640,7 @@ function analisarTextoHolerites(){
 
 rD();
 </script>
-  <!-- ASOs -->
-  <div class="page" id="page-asos">
-    <div class="srow" id="aso-stats"></div>
-    <div class="fbar">
-      <input type="text" id="aso-s" placeholder="Buscar funcionário..." oninput="rAsos()">
-      <select id="aso-st" onchange="rAsos()">
-        <option value="">Todos</option>
-        <option value="vencido">Vencido</option>
-        <option value="alerta">Próx. vencimento</option>
-        <option value="ok">Em dia</option>
-        <option value="sem">Sem registro</option>
-      </select>
-      <div class="mla"><button class="btn btn-p" onclick="abrirModalAso()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Registrar ASO</button></div>
-    </div>
-    <div id="aso-list"></div>
-  </div>
+
 
   <!-- MODAL ASO -->
   <div id="modal-aso" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center">
