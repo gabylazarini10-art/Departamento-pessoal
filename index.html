@@ -1739,12 +1739,17 @@ function analisarTextoHolerites(){
 }
 
 // Inicia o app após todas as declarações
-if(window.inicializarDados){
-  window.addEventListener('dadosCarregados', iniciarApp, {once:true});
-  window.inicializarDados();
-} else {
-  iniciarApp();
+// Aguarda o Firebase estar pronto (módulo ES carrega assíncrono)
+function tentarIniciar(){
+  if(window.inicializarDados){
+    window.addEventListener('dadosCarregados', iniciarApp, {once:true});
+    window.inicializarDados();
+  } else {
+    // Firebase ainda não carregou, tenta de novo em 100ms
+    setTimeout(tentarIniciar, 100);
+  }
 }
+tentarIniciar();
 </script>
 
 
