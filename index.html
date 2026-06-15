@@ -709,12 +709,13 @@ function processarFerias(texto,pfx){
 
     const periodo={ini:iniPeriodo,fim:fimPeriodo,limite:limite||fimPeriodo,saldo,diasDir:30};
 
-    if(enc[cod]){
-      // Segundo período do mesmo funcionário
-      const jaTem=enc[cod].periodos.find(p=>p.ini===iniPeriodo);
-      if(!jaTem)enc[cod].periodos.push(periodo);
+    // Chave pelo NOME normalizado — evita conflito de códigos repetidos entre empresas
+    const chave=norm(nome);
+    if(enc[chave]){
+      const jaTem=enc[chave].periodos.find(p=>p.ini===iniPeriodo);
+      if(!jaTem)enc[chave].periodos.push(periodo);
     }else{
-      enc[cod]={id:cod,nome,admissao,periodos:[periodo]};
+      enc[chave]={id:cod,nome,admissao,periodos:[periodo]};
     }
   }
 
@@ -723,7 +724,7 @@ function processarFerias(texto,pfx){
     const linhas=texto.split('\n').map(l=>l.trim()).filter(Boolean);
     const reF=/^(\d{1,6})\s+([A-Z][A-Z\s]+?)\s+(\d{2}\/\d{2}\/\d{4})/;
     const rP=/^(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})/;
-    let uc=null;
+    let uchave=null;
     linhas.forEach(l=>{
       if(/^(código|empregado|data|total|sistema|observa|página|emissão|horas|programação|---)/i.test(l))return;
       const mF=l.match(reF);
@@ -735,25 +736,26 @@ function processarFerias(texto,pfx){
         else if(dts.length>=2){fim=pBR(dts[1]);lim=fim;}
         const sd=xSaldo(l);if(!adm||!fim)return;
         const p={ini:ini2||adm,fim,limite:lim||fim,saldo:sd,diasDir:30};
-        if(enc[cod])enc[cod].periodos.push(p);else enc[cod]={id:cod,nome,admissao:adm,periodos:[p]};
-        uc=cod;return;
+        const chave=norm(nome);
+        if(enc[chave])enc[chave].periodos.push(p);else enc[chave]={id:cod,nome,admissao:adm,periodos:[p]};
+        uchave=chave;return;
       }
       const mP=l.match(rP);
-      if(mP&&uc&&enc[uc]){const dts=l.match(/\d{2}\/\d{2}\/\d{4}/g)||[];if(dts.length<2)return;enc[uc].periodos.push({ini:pBR(dts[0]),fim:pBR(dts[1]),limite:pBR(dts[dts.length-1])||pBR(dts[1]),saldo:xSaldo(l),diasDir:30});}
+      if(mP&&uchave&&enc[uchave]){const dts=l.match(/\d{2}\/\d{2}\/\d{4}/g)||[];if(dts.length<2)return;enc[uchave].periodos.push({ini:pBR(dts[0]),fim:pBR(dts[1]),limite:pBR(dts[dts.length-1])||pBR(dts[1]),saldo:xSaldo(l),diasDir:30});}
     });
   }
 
   const lista=Object.values(enc);
   if(!lista.length){mostrarErro(pfx,'Não foi possível identificar funcionários. Verifique se é o PDF correto da BS Assessoria.');return;}
-  let novos=0,atu=0,semAlt=[];
+  let novos=0,atu=0,semAlt=[],nomesNovos=[];
   lista.forEach(item=>{
-    // Busca SOMENTE por nome — códigos podem repetir entre empresas diferentes
+    // Busca SOMENTE por nome normalizado — códigos podem repetir entre empresas diferentes
     const ex=funcs.find(f=>norm(f.nome)===norm(item.nome));
     if(!ex){
       let newId=item.id;
       if(funcs.find(f=>f.id===newId))newId=item.id+'x'+Date.now()%10000;
       funcs.push({id:newId,nome:item.nome,admissao:item.admissao,periodos:item.periodos.map(p=>({...p})),cpf:'',rg:'',nasc:'',sexo:'',ec:'',end:'',tel:'',email:'',sal:'',cont:'CLT',pis:'',ctps:'',banco:'',ag:'',cc:'',obs:'',status:'Ativo',dfer:30,cargo:'',setor:''});
-      novos++;
+      novos++;nomesNovos.push(item.nome);
     }else{
       const idx=funcs.findIndex(f=>norm(f.nome)===norm(item.nome));
       let mudou=false;
@@ -764,7 +766,7 @@ function processarFerias(texto,pfx){
   sv();setBar(pfx,100,'');
   document.getElementById('fer-label').textContent='✓ PDF importado com sucesso';
   let html=`<div class="result-box">`;
-  if(novos)html+=`<div class="result-item result-novo">✅ ${novos} funcionário(s) novo(s) cadastrado(s)</div>`;
+  if(novos)html+=`<div class="result-item result-novo">✅ ${novos} novo(s) cadastrado(s): ${nomesNovos.join(', ')}</div>`;
   if(atu)html+=`<div class="result-item result-atu">🔄 ${atu} funcionário(s) com férias atualizadas</div>`;
   if(semAlt.length)html+=`<div class="result-item result-ok">— Sem alteração: ${semAlt.join(', ')}</div>`;
   html+=`</div>`;
