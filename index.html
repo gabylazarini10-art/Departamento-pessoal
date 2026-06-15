@@ -696,7 +696,12 @@ function rAsos(){
   const fs=document.getElementById('aso-st').value;
   let vd=0,al=0,ok=0,sem=0;
   funcs.forEach(f=>{const s=cAso(f);if(s==='vencido')vd++;else if(s==='alerta')al++;else if(s==='ok')ok++;else sem++;});
-  document.getElementById('aso-stats').innerHTML=`<div class="sc"><div class="slbl">Total</div><div class="sval">${funcs.length}</div></div><div class="sc"><div class="slbl">Vencidos</div><div class="sval r">${vd}</div></div><div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${al}</div></div><div class="sc"><div class="slbl">Em dia</div><div class="sval g">${ok}</div></div><div class="sc"><div class="slbl">Sem registro</div><div class="sval">${sem}</div></div>`;
+  document.getElementById('aso-stats').innerHTML=
+    `<div class="sc"><div class="slbl">Total</div><div class="sval">${funcs.length}</div></div>`+
+    `<div class="sc"><div class="slbl">Vencidos</div><div class="sval r">${vd}</div></div>`+
+    `<div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${al}</div></div>`+
+    `<div class="sc"><div class="slbl">Em dia</div><div class="sval g">${ok}</div></div>`+
+    `<div class="sc"><div class="slbl">Sem registro</div><div class="sval">${sem}</div></div>`;
   const list=funcs.filter(f=>{
     if(sr&&!f.nome.toLowerCase().includes(sr))return false;
     if(fs&&cAso(f)!==fs)return false;
@@ -705,37 +710,67 @@ function rAsos(){
     const ord={vencido:0,alerta:1,sem:2,ok:3};
     return ord[cAso(a)]-ord[cAso(b)]||a.nome.localeCompare(b.nome);
   });
-  const ord2={vencido:'<span class="badge bvencida">Vencido</span>',alerta:'<span class="badge balerta">',ok:'<span class="badge bok">Em dia</span>',sem:'<span class="badge" style="background:var(--sf2);color:var(--tx3)">Sem registro</span>'};
-  const tb=document.getElementById('aso-tbody');
-  if(!list.length){tb.innerHTML=`<tr><td colspan="7"><div class="empty"><p>Nenhum resultado.</p></div></td></tr>`;return;}
-  tb.innerHTML=list.map(f=>{
+  const el=document.getElementById('aso-list');
+  if(!list.length){el.innerHTML='<div class="tc"><div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Nenhum resultado.</p></div></div>';return;}
+  el.innerHTML=list.map(f=>{
     const ult=ultimoAso(f.id);
     const sa=cAso(f);
     const dr=ult?Math.round((new Date(ult.validade+'T12:00:00')-HOJE)/86400000):null;
     let badge='';
     if(sa==='vencido')badge='<span class="badge bvencida">Vencido</span>';
-    else if(sa==='alerta')badge=`<span class="badge balerta">Vence ${dr}d</span>`;
+    else if(sa==='alerta')badge='<span class="badge balerta">Vence em '+dr+'d</span>';
     else if(sa==='ok')badge='<span class="badge bok">Em dia</span>';
     else badge='<span class="badge" style="background:var(--sf2);color:var(--tx3)">Sem registro</span>';
     const c=ac(f.nome);
-    // Todos os ASOs do funcionário (para mostrar histórico expandível)
     const hist=asos.filter(a=>a.fid===f.id).sort((a,b)=>b.data.localeCompare(a.data));
-    const histRows=hist.map(a=>`<tr style="background:var(--sf2)"><td colspan="2" style="font-size:10px;color:var(--tx3);padding:5px 12px 5px 36px">${a.tipo}</td><td style="font-size:10px;padding:5px 12px">${fd(a.data)}</td><td style="font-size:10px;padding:5px 12px">${fd(a.validade)}</td><td></td><td style="font-size:10px;color:var(--tx3);padding:5px 12px">${a.obs||''}</td><td style="padding:5px 8px;white-space:nowrap"><button class="bicon" title="Editar" onclick="editAso('${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="bicon" title="Excluir" onclick="delAso('${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button></td></tr>`).join('');
-    return`<tr>
-      <td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="background:${c.bg};color:${c.fg};font-size:9px">${ini(f.nome)}</div><div><div style="font-weight:500;font-size:12px">${f.nome}</div><div style="font-size:10px;color:var(--tx3)">${f.cargo||''}</div></div></div></td>
-      <td style="font-size:11px">${ult?ult.tipo:'—'}</td>
-      <td style="font-size:11px">${ult?fd(ult.data):'—'}</td>
-      <td style="font-size:11px">${ult?fd(ult.validade):'—'}</td>
-      <td style="font-size:11px;text-align:center;font-weight:600">${dr!==null?(dr<0?Math.abs(dr)+'d atr.':dr+'d'):'—'}</td>
-      <td>${badge}</td>
-      <td style="white-space:nowrap">
-        <button class="bicon" title="Novo ASO" onclick="abrirModalAso('${f.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
-        ${hist.length>0?`<button class="bicon" title="Ver histórico" onclick="togAsoHist('ah-${f.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></button>`:''}
-      </td>
-    </tr>${hist.length>0?`<tr id="ah-${f.id}" style="display:none">${histRows?'<td colspan="7" style="padding:0"><table style="width:100%">'+histRows+'</table></td>':''}</tr>`:''}`;
+    // Barra de progresso de validade
+    let barHtml='';
+    if(ult){
+      const total=Math.round((new Date(ult.validade+'T12:00:00')-new Date(ult.data+'T12:00:00'))/86400000);
+      const pct=total>0?Math.max(0,Math.min(100,Math.round(dr/total*100))):0;
+      const barCor=sa==='vencido'?'var(--rd)':sa==='alerta'?'var(--am)':'var(--gr)';
+      barHtml='<div style="background:var(--bd);border-radius:99px;height:3px;margin-top:5px;overflow:hidden"><div style="height:100%;border-radius:99px;background:'+barCor+';width:'+pct+'%"></div></div>';
+    }
+    // Histórico expandível
+    const icEdit='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+    const icDel='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
+    const histHtml=hist.length?hist.map(a=>{
+      const isAtivo=a===ult;
+      return '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid var(--bd);background:'+(isAtivo?'var(--sf2)':'var(--sf)')+'">'+
+        '<div style="flex:1;font-size:11px;color:var(--tx2)">'+a.tipo+(a.obs?' · <span style="color:var(--tx3)">'+a.obs+'</span>':'')+'</div>'+
+        '<div style="font-size:11px;color:var(--tx3)">'+fd(a.data)+' → '+fd(a.validade)+'</div>'+
+        '<div style="display:flex;gap:2px">'+
+          '<button class="bicon" data-id="'+a.id+'" data-act="editAso" title="Editar">'+icEdit+'</button>'+
+          '<button class="bicon" data-id="'+a.id+'" data-act="delAso" title="Excluir">'+icDel+'</button>'+
+        '</div>'+
+      '</div>';
+    }).join(''):'';
+    const fid2=f.id;
+    return `<div class="func-card">
+      <div class="func-hdr" onclick="togAsoHist('ah-${fid2}')">
+        <div class="av" style="background:${c.bg};color:${c.fg}">${ini(f.nome)}</div>
+        <div class="func-info">
+          <div class="func-nome">${f.nome}</div>
+          <div class="func-sub">${f.cargo||''}${ult?' · último: '+fd(ult.data)+' → '+fd(ult.validade):''}</div>
+          ${barHtml}
+        </div>
+        ${badge}
+        <button class="btn btn-sm" style="margin-left:8px;flex-shrink:0" onclick="event.stopPropagation();abrirModalAso('${fid2}')">+ ASO</button>
+        <svg class="chev" id="ah-${fid2}-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      ${hist.length?'<div class="hol-wrap" id="ah-'+fid2+'">'+histHtml+'</div>':''}
+    </div>`;
   }).join('');
 }
-function togAsoHist(id){const r=document.getElementById(id);if(r)r.style.display=r.style.display==='none'?'table-row':'none';}
+function togAsoHist(id){const w=document.getElementById(id);const ch=document.getElementById(id+'-chev');if(!w)return;const o=w.classList.toggle('open');if(ch){if(o)ch.classList.add('open');else ch.classList.remove('open');}}
+// Delegação de eventos para botões de ASO gerados dinamicamente
+document.addEventListener('click',function(e){
+  const btn=e.target.closest('[data-act]');
+  if(!btn)return;
+  const act=btn.dataset.act;const id=btn.dataset.id;
+  if(act==='editAso')editAso(id);
+  else if(act==='delAso')delAso(id);
+});
 function abrirModalAso(fid){
   document.getElementById('modal-aso-titulo').textContent='Registrar ASO';
   document.getElementById('aso-eid').value='';
@@ -1405,12 +1440,42 @@ function rPlan(anoSel){
         return`<option value="${f.id}">${f.nome.split(' ')[0]} ${f.nome.split(' ').slice(-1)[0]} (${rest}d${isAcum(f)?'⚠':''})</option>`;
       }).join('');
 
+      // Mini calendário do mês
+      const diasNoMes=new Date(ano,m+1,0).getDate();
+      const primeiroDia=new Date(ano,m,1).getDay(); // 0=dom
+      const hoje=new Date();
+      const eMesAtual=hoje.getFullYear()===ano&&hoje.getMonth()===m;
+      const diaHoje=eMesAtual?hoje.getDate():null;
+      // Monta array de dias com marcação de quem está de férias naquele dia
+      const dias=[];
+      for(let d=1;d<=diasNoMes;d++){
+        const dataStr=`${ano}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const ehFds=[0,6].includes(new Date(ano,m,d).getDay());
+        dias.push({d,dataStr,ehFds});
+      }
+      // Cabeçalhos da semana
+      const semCab=['D','S','T','Q','Q','S','S'].map(x=>`<div style="text-align:center;font-size:9px;font-weight:600;color:var(--tx3);padding:2px 0">${x}</div>`).join('');
+      // Células do calendário
+      let cells='';
+      for(let i=0;i<primeiroDia;i++)cells+=`<div></div>`;
+      for(const {d,dataStr,ehFds} of dias){
+        const isHoje=d===diaHoje;
+        const bg=isHoje?'var(--tx)':ehFds?'var(--sf2)':'';
+        const cor=isHoje?'#fff':ehFds?'var(--tx3)':'var(--tx2)';
+        cells+=`<div style="text-align:center;font-size:9px;border-radius:3px;padding:2px 1px;background:${bg};color:${cor}">${d}</div>`;
+      }
+      const cal=`<div style="margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;margin-bottom:2px">${semCab}</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px">${cells}</div>
+      </div>`;
+
       grade+=`<div style="background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden">
         <div style="padding:9px 12px;background:var(--sf2);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:12px;font-weight:600">${MESES_FULL[m]} ${ano}</span>
-          <span style="font-size:10px;color:var(--tx3)">${entradas.length} func.</span>
+          <span style="font-size:10px;color:var(--tx3)">${diasNoMes}d · ${entradas.length} func.</span>
         </div>
-        <div style="padding:10px 12px;min-height:64px">
+        <div style="padding:10px 12px">
+          ${cal}
           <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:${disponiveis.length?'8':'0'}px">${tags||'<span style="font-size:11px;color:var(--tx3)">Nenhum planejado</span>'}</div>
           ${disponiveis.length?`<select onchange="adicionarAoMes(this,'${mesKey}')" style="width:100%;font-size:11px;padding:4px 7px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx)"><option value="">+ Adicionar funcionário...</option>${opts}</select>`:''}
         </div>
@@ -1501,15 +1566,7 @@ rD();
       </select>
       <div class="mla"><button class="btn btn-p" onclick="abrirModalAso()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Registrar ASO</button></div>
     </div>
-    <div class="tc"><table><thead><tr>
-      <th style="width:28%">Funcionário</th>
-      <th style="width:12%">Tipo</th>
-      <th style="width:14%">Data do exame</th>
-      <th style="width:14%">Válido até</th>
-      <th style="width:10%">Dias restantes</th>
-      <th style="width:10%">Status</th>
-      <th style="width:12%"></th>
-    </tr></thead><tbody id="aso-tbody"></tbody></table></div>
+    <div id="aso-list"></div>
   </div>
 
   <!-- MODAL ASO -->
