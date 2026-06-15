@@ -832,11 +832,13 @@ function processarHolerites(texto,pfx){
     const key=norm(h.nome)+'|'+h.competencia;
     const idx=hols.findIndex(x=>norm(x.nome)+'|'+x.competencia===key);
     if(idx>=0)hols[idx]=h;else hols.push(h);
-    const fi=funcs.findIndex(f=>norm(f.nome)===norm(h.nome)||f.id===h.id);
+    // Match SOMENTE por nome — id pode repetir entre empresas diferentes
+    const fi=funcs.findIndex(f=>norm(f.nome)===norm(h.nome));
     if(fi>=0){
       if(!funcs[fi].cargo&&h.cargo)funcs[fi].cargo=h.cargo;
       if(!funcs[fi].admissao&&h.admissao)funcs[fi].admissao=h.admissao;
-      if(!funcs[fi].id&&h.id)funcs[fi].id=h.id;
+      // Só atualiza o id se ainda vazio E ninguém mais usa esse id
+      if(!funcs[fi].id&&h.id&&!funcs.some((f,i)=>i!==fi&&f.id===h.id))funcs[fi].id=h.id;
     }
   });
   sv();setBar(pfx,100,'');
