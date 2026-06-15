@@ -499,12 +499,7 @@ function iniciarApp(){
   rD();
 }
 
-if(window.inicializarDados){
-  window.addEventListener('dadosCarregados', iniciarApp, {once:true});
-  window.inicializarDados();
-} else {
-  iniciarApp();
-}
+
 
 function sv(){
   localStorage.setItem('dp4_f',JSON.stringify(funcs));
@@ -1743,7 +1738,13 @@ function analisarTextoHolerites(){
   document.getElementById('hol-txt').value='';
 }
 
-rD();
+// Inicia o app após todas as declarações
+if(window.inicializarDados){
+  window.addEventListener('dadosCarregados', iniciarApp, {once:true});
+  window.inicializarDados();
+} else {
+  iniciarApp();
+}
 </script>
 
 
