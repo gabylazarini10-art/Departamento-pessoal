@@ -721,9 +721,9 @@ function processarFerias(texto,pfx){
     }
   }
 
-  // Segunda passagem: captura períodos adicionais (segunda linha sem código/nome)
-  // Associa ao último funcionário encontrado antes dessa posição no texto
-  // Monta mapa de posição→chave para encontrar o "dono" de cada período extra
+  // Segunda passagem: captura períodos extras (linha sem código/nome, após "- -" do período anterior)
+  // Padrão BS: "- - DD/MM/YYYY DD/MM/YYYY ....pontos.... SALDO 0 30 DD/MM/YYYY"
+  // Monta mapa posição→chave para associar ao funcionário correto
   const posChave=[];
   const reFuncPos=/\b(\d{1,6})\s+([A-Z][A-Z\s]{3,50}?)\s+(\d{2}\/\d{2}\/\d{4})/g;
   let mp;
@@ -732,20 +732,20 @@ function processarFerias(texto,pfx){
     const ch=norm(n);
     if(enc[ch])posChave.push({pos:mp.index,chave:ch});
   }
-  let mp2;
-  rePer.lastIndex=0;
-  while((mp2=rePer.exec(flat))!==null){
-    const ini2=pBR(mp2[1]);
-    const fim2=pBR(mp2[4]);
-    const lim2=pBR(mp2[5]);
+  // Regex que captura linha extra: após "- -" vem INI FIM ...pontos/espaços... SALDO 0 30 LIMITE
+  const reExtra=/- -\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+[\.\/ ]+\s*(\d{1,2})\s+\d+\s+\d+\s+(\d{2}\/\d{2}\/\d{4})/g;
+  let mx;
+  while((mx=reExtra.exec(flat))!==null){
+    const ini2=pBR(mx[1]);
+    const fim2=pBR(mx[2]);
+    const saldo2=parseFloat(mx[3])||0;
+    const lim2=pBR(mx[4]);
     if(!ini2||!fim2)continue;
-    // Descobre qual funcionário está antes desta posição
-    const pos=mp2.index;
+    // Acha o funcionário imediatamente antes desta posição
+    const pos=mx.index;
     let dono=null;
     for(let i=posChave.length-1;i>=0;i--){if(posChave[i].pos<pos){dono=posChave[i].chave;break;}}
-    if(!dono)continue;
-    const trecho2=flat.substring(mp2.index,mp2.index+mp2[0].length+30);
-    const saldo2=xSaldo(trecho2);
+    if(!dono||!enc[dono])continue;
     const jaTem=enc[dono].periodos.find(p=>p.ini===ini2);
     if(!jaTem)enc[dono].periodos.push({ini:ini2,fim:fim2,limite:lim2||fim2,saldo:saldo2,diasDir:30});
   }
