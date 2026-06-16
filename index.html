@@ -41,6 +41,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .fbar{display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
 .fbar input,.fbar select{padding:6px 10px;font-size:12px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx);outline:none}
 .fbar input{min-width:180px}.mla{margin-left:auto}
+.fin-tab{padding:9px 16px;font-size:12px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--tx3);cursor:pointer}
+.fin-tab.active{color:var(--tx);border-bottom-color:var(--tx)}
+.fin-tab:hover{color:var(--tx2)}
 .tc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);overflow:hidden}
 table{width:100%;border-collapse:collapse;font-size:12px}
 thead th{background:var(--sf2);padding:9px 12px;text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);border-bottom:1px solid var(--bd);white-space:nowrap}
@@ -122,13 +125,17 @@ tbody td{padding:9px 12px;vertical-align:middle}
     const db = getFirestore(app);
 
     // Salva todos os dados no Firestore
-    window.svFirebase = async function(funcs, lancs, hols, asos, plano) {
+    window.svFirebase = async function(funcs, lancs, hols, asos, plano, adiant, comissoes, marmitas, cfgFin) {
       try {
         await setDoc(doc(db, 'dp', 'funcs'), { data: JSON.stringify(funcs) });
         await setDoc(doc(db, 'dp', 'lancs'), { data: JSON.stringify(lancs) });
         await setDoc(doc(db, 'dp', 'hols'),  { data: JSON.stringify(hols) });
         await setDoc(doc(db, 'dp', 'asos'),  { data: JSON.stringify(asos) });
         await setDoc(doc(db, 'dp', 'plano'), { data: JSON.stringify(plano) });
+        if(adiant!==undefined)await setDoc(doc(db, 'dp', 'adiant'), { data: JSON.stringify(adiant) });
+        if(comissoes!==undefined)await setDoc(doc(db, 'dp', 'comissoes'), { data: JSON.stringify(comissoes) });
+        if(marmitas!==undefined)await setDoc(doc(db, 'dp', 'marmitas'), { data: JSON.stringify(marmitas) });
+        if(cfgFin!==undefined)await setDoc(doc(db, 'dp', 'cfgfin'), { data: JSON.stringify(cfgFin) });
       } catch(e) { console.warn('Firebase sync error:', e); }
     };
 
@@ -139,10 +146,11 @@ tbody td{padding:9px 12px;vertical-align:middle}
           const snap = await getDoc(doc(db, 'dp', id));
           return snap.exists() ? JSON.parse(snap.data().data) : null;
         };
-        const [funcs, lancs, hols, asos, plano] = await Promise.all([
-          get('funcs'), get('lancs'), get('hols'), get('asos'), get('plano')
+        const [funcs, lancs, hols, asos, plano, adiant, comissoes, marmitas, cfgFin] = await Promise.all([
+          get('funcs'), get('lancs'), get('hols'), get('asos'), get('plano'),
+          get('adiant'), get('comissoes'), get('marmitas'), get('cfgfin')
         ]);
-        return { funcs, lancs, hols, asos, plano };
+        return { funcs, lancs, hols, asos, plano, adiant, comissoes, marmitas, cfgFin };
       } catch(e) {
         console.warn('Firebase load error:', e);
         return null;
@@ -165,6 +173,10 @@ tbody td{padding:9px 12px;vertical-align:middle}
         localStorage.setItem('dp4_h',     JSON.stringify(remoto.hols  || []));
         localStorage.setItem('dp4_asos',  JSON.stringify(remoto.asos  || []));
         if (remoto.plano) localStorage.setItem('dp4_plano2', JSON.stringify(remoto.plano));
+        localStorage.setItem('dp4_adiant', JSON.stringify(remoto.adiant || []));
+        localStorage.setItem('dp4_comis',  JSON.stringify(remoto.comissoes || []));
+        localStorage.setItem('dp4_marmitas', JSON.stringify(remoto.marmitas || []));
+        if (remoto.cfgFin) localStorage.setItem('dp4_cfgfin', JSON.stringify(remoto.cfgFin));
         console.log('✅ Dados carregados do Firebase');
       } else {
         console.log('📦 Usando dados do localStorage');
@@ -205,6 +217,10 @@ tbody td{padding:9px 12px;vertical-align:middle}
     <div class="nlbl">Documentos</div>
     <button class="ni" onclick="go('holerites')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Holerites</button>
     <button class="ni" onclick="go('asos')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>ASOs</button>
+  </div>
+  <div class="nsec">
+    <div class="nlbl">Financeiro</div>
+    <button class="ni" onclick="go('financeiro')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Adiant. e Comissões</button>
   </div>
   <div class="nsec" style="margin-top:auto">
     <div class="nlbl">Contabilidade</div>
@@ -460,6 +476,133 @@ tbody td{padding:9px 12px;vertical-align:middle}
     <div id="aso-list"></div>
   </div>
 
+  <!-- FINANCEIRO -->
+  <div class="page" id="page-financeiro">
+    <div class="srow" id="fin-stats" style="grid-template-columns:repeat(4,1fr)"></div>
+
+    <div style="display:flex;gap:4px;border-bottom:1px solid var(--bd);margin-bottom:18px">
+      <button class="fin-tab active" data-tab="resumo" onclick="finTab('resumo')">Resumo do mês</button>
+      <button class="fin-tab" data-tab="adiant" onclick="finTab('adiant')">Adiantamentos</button>
+      <button class="fin-tab" data-tab="comis" onclick="finTab('comis')">Comissões</button>
+      <button class="fin-tab" data-tab="marmita" onclick="finTab('marmita')">Marmitas e Cafés</button>
+    </div>
+
+    <!-- RESUMO -->
+    <div id="fin-pane-resumo" class="fin-pane">
+      <div class="fbar">
+        <select id="fin-mes" onchange="rFin()"></select>
+        <div class="mla"><button class="btn" onclick="exportarResumoFin()">📄 Exportar / Imprimir</button></div>
+      </div>
+      <div class="tc"><table><thead><tr>
+        <th>Funcionário</th><th style="text-align:right">Salário</th><th style="text-align:right">Comissões</th><th style="text-align:right">Adiant.</th><th style="text-align:right">Líquido estimado</th>
+      </tr></thead><tbody id="fin-resumo-tbody"></tbody></table></div>
+    </div>
+
+    <!-- ADIANTAMENTOS -->
+    <div id="fin-pane-adiant" class="fin-pane" style="display:none">
+      <div class="fbar">
+        <input type="text" id="adi-s" placeholder="Buscar funcionário..." oninput="rAdiant()">
+        <select id="adi-st" onchange="rAdiant()">
+          <option value="">Todos</option>
+          <option value="pendente">Pendente</option>
+          <option value="quitado">Quitado</option>
+        </select>
+        <div class="mla"><button class="btn btn-p" onclick="abrirModalAdiant()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo adiantamento</button></div>
+      </div>
+      <div class="tc"><table><thead><tr>
+        <th>Funcionário</th><th>Data</th><th style="text-align:right">Valor</th><th>Parcelas</th><th>Status</th><th></th>
+      </tr></thead><tbody id="adi-tbody"></tbody></table></div>
+    </div>
+
+    <!-- COMISSÕES -->
+    <div id="fin-pane-comis" class="fin-pane" style="display:none">
+      <div class="fbar">
+        <input type="text" id="com-s" placeholder="Buscar funcionário..." oninput="rComis()">
+        <select id="com-safra" onchange="rComis()">
+          <option value="">Todas as safras</option>
+          <option value="Soja">Soja</option>
+          <option value="Algodão">Algodão</option>
+          <option value="Milho">Milho</option>
+          <option value="Sorgo">Sorgo</option>
+        </select>
+        <div class="mla"><button class="btn btn-p" onclick="abrirModalComis()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova comissão</button></div>
+      </div>
+      <div class="tc"><table><thead><tr>
+        <th>Funcionário</th><th>Safra</th><th>Data</th><th style="text-align:right">Valor</th><th></th>
+      </tr></thead><tbody id="com-tbody"></tbody></table></div>
+    </div>
+
+    <!-- MARMITAS -->
+    <div id="fin-pane-marmita" class="fin-pane" style="display:none">
+      <div class="fbar">
+        <select id="mar-mes" onchange="rMarmitas()"></select>
+        <div class="mla" style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:11px;color:var(--tx3)">Valor marmita</label>
+          <input type="number" id="mar-vm" value="15" step="0.5" style="width:70px" onchange="salvarCfgFin()">
+          <label style="font-size:11px;color:var(--tx3)">Valor café</label>
+          <input type="number" id="mar-vc" value="5" step="0.5" style="width:70px" onchange="salvarCfgFin()">
+        </div>
+      </div>
+      <div class="tc"><table><thead><tr>
+        <th>Cozinheira</th><th style="text-align:center">Marmitas</th><th style="text-align:center">Cafés</th><th style="text-align:right">Total a pagar</th>
+      </tr></thead><tbody id="mar-tbody"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- MODAL ADIANTAMENTO -->
+  <div id="modal-adiant" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--sf);border-radius:var(--rl);padding:24px;width:380px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:18px">Novo adiantamento</div>
+      <input type="hidden" id="adi-eid">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="fc"><label>Funcionário *</label><select id="adi-func" style="width:100%"></select></div>
+        <div class="fc"><label>Valor total *</label><input type="number" id="adi-valor" step="0.01" placeholder="0,00"></div>
+        <div class="fc"><label>Data do adiantamento</label><input type="date" id="adi-data"></div>
+        <div class="fc"><label>Descontar em</label>
+          <select id="adi-parc" onchange="adiToggleParcelas()">
+            <option value="1">1 parcela (mês seguinte)</option>
+            <option value="2">2 parcelas</option>
+          </select>
+        </div>
+        <div class="fg" id="adi-parc-datas">
+          <div class="fc"><label>Mês 1ª parcela</label><input type="month" id="adi-m1"></div>
+          <div class="fc" id="adi-m2-wrap" style="display:none"><label>Mês 2ª parcela</label><input type="month" id="adi-m2"></div>
+        </div>
+        <div class="fc"><label>Observações</label><input type="text" id="adi-obs"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px">
+        <button class="btn" style="flex:1" onclick="fecharModalAdiant()">Cancelar</button>
+        <button class="btn btn-p" style="flex:1" onclick="salvarAdiant()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL COMISSÃO -->
+  <div id="modal-comis" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--sf);border-radius:var(--rl);padding:24px;width:380px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:18px">Nova comissão</div>
+      <input type="hidden" id="com-eid">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="fc"><label>Funcionário *</label><select id="com-func" style="width:100%"></select></div>
+        <div class="fc"><label>Safra *</label>
+          <select id="com-safra-sel" style="width:100%">
+            <option value="Soja">Soja</option>
+            <option value="Algodão">Algodão</option>
+            <option value="Milho">Milho</option>
+            <option value="Sorgo">Sorgo</option>
+          </select>
+        </div>
+        <div class="fc"><label>Valor *</label><input type="number" id="com-valor" step="0.01" placeholder="0,00"></div>
+        <div class="fc"><label>Data</label><input type="date" id="com-data"></div>
+        <div class="fc"><label>Observações</label><input type="text" id="com-obs" placeholder="Ex: produção, resultado..."></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px">
+        <button class="btn" style="flex:1" onclick="fecharModalComis()">Cancelar</button>
+        <button class="btn btn-p" style="flex:1" onclick="salvarComis()">Salvar e gerar recibo</button>
+      </div>
+    </div>
+  </div>
+
 </main>
 <div class="toast" id="toast"></div>
 
@@ -485,6 +628,10 @@ let funcs=JSON.parse(localStorage.getItem('dp4_f')||'null');
 let lancs=JSON.parse(localStorage.getItem('dp4_l')||'[]');
 let hols=JSON.parse(localStorage.getItem('dp4_h')||'[]');
 let asos=JSON.parse(localStorage.getItem('dp4_asos')||'[]');
+let adiant=JSON.parse(localStorage.getItem('dp4_adiant')||'[]');
+let comissoes=JSON.parse(localStorage.getItem('dp4_comis')||'[]');
+let marmitas=JSON.parse(localStorage.getItem('dp4_marmitas')||'[]');
+let cfgFin=JSON.parse(localStorage.getItem('dp4_cfgfin')||'{"valorMarmita":15,"valorCafe":5}');
 const HOJE=new Date();
 
 // Aguarda carregamento dos dados (Firebase ou localStorage)
@@ -494,6 +641,10 @@ function iniciarApp(){
   lancs=JSON.parse(localStorage.getItem('dp4_l')||'[]');
   hols=JSON.parse(localStorage.getItem('dp4_h')||'[]');
   asos=JSON.parse(localStorage.getItem('dp4_asos')||'[]');
+  adiant=JSON.parse(localStorage.getItem('dp4_adiant')||'[]');
+  comissoes=JSON.parse(localStorage.getItem('dp4_comis')||'[]');
+  marmitas=JSON.parse(localStorage.getItem('dp4_marmitas')||'[]');
+  cfgFin=JSON.parse(localStorage.getItem('dp4_cfgfin')||'{"valorMarmita":15,"valorCafe":5}');
   
   if(!funcs){funcs=DI.map(f=>({...f,cpf:'',rg:'',nasc:'',sexo:'',ec:'',end:'',tel:'',email:'',sal:'',cont:'CLT',pis:'',ctps:'',banco:'',ag:'',cc:'',obs:'',status:'Ativo',dfer:30}));sv();}
   rD();
@@ -506,10 +657,14 @@ function sv(){
   localStorage.setItem('dp4_l',JSON.stringify(lancs));
   localStorage.setItem('dp4_h',JSON.stringify(hols));
   localStorage.setItem('dp4_asos',JSON.stringify(asos));
+  localStorage.setItem('dp4_adiant',JSON.stringify(adiant));
+  localStorage.setItem('dp4_comis',JSON.stringify(comissoes));
+  localStorage.setItem('dp4_marmitas',JSON.stringify(marmitas));
+  localStorage.setItem('dp4_cfgfin',JSON.stringify(cfgFin));
   // Sincroniza com Firebase em background
   if(window.svFirebase){
     const plano=JSON.parse(localStorage.getItem('dp4_plano2')||'{}');
-    window.svFirebase(funcs,lancs,hols,asos,plano).catch(()=>{});
+    window.svFirebase(funcs,lancs,hols,asos,plano,adiant,comissoes,marmitas,cfgFin).catch(()=>{});
   }
 }
 
@@ -557,6 +712,7 @@ const PM={
   'importar':{t:'Importar PDFs da contabilidade',s:'Leitura local — sem internet, sem custo'},
   'planejador':{t:'Planejador de Férias',s:'Organize estrategicamente as férias por mês'},
   'asos':{t:'ASOs',s:'Controle de exames admissionais e periódicos'},
+  'financeiro':{t:'Adiantamentos e Comissões',s:'Controle financeiro dos funcionários'},
 };
 
 function go(p,param){
@@ -573,6 +729,7 @@ function go(p,param){
   if(p==='lancar')rLan();
   if(p==='holerites')rHol();
   if(p==='asos')rAsos();
+  if(p==='financeiro')rFin();
   if(p==='planejador')rPlan();
   if(p==='ficha'&&param)rFicha(param);
   if(p==='novo-func'){param?fillF(param):clrF();document.getElementById('ttl').textContent=param?'Editar funcionário':'Novo funcionário';}
@@ -939,6 +1096,348 @@ function editAso(id){
   document.getElementById('modal-aso').style.display='flex';
 }
 function delAso(id){if(!confirm('Excluir este ASO?'))return;asos=asos.filter(a=>a.id!==id);sv();toast('Removido.');rAsos();}
+// ═══════════════════ FINANCEIRO: Adiantamentos, Comissões, Marmitas ═══════════════════
+function mesAtualStr(){return HOJE.getFullYear()+'-'+String(HOJE.getMonth()+1).padStart(2,'0');}
+function listaMeses(qtd=12){
+  const arr=[];
+  for(let i=-3;i<=8;i++){
+    const d=new Date(HOJE.getFullYear(),HOJE.getMonth()+i,1);
+    arr.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+  }
+  return arr;
+}
+function mesLabel(mk){
+  const p=mk.split('-');const y=p[0],m=p[1];
+  const MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  return MESES[parseInt(m)-1]+' / '+y;
+}
+
+function finTab(tab){
+  document.querySelectorAll('.fin-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  document.querySelectorAll('.fin-pane').forEach(p=>p.style.display='none');
+  document.getElementById('fin-pane-'+tab).style.display='block';
+  if(tab==='resumo')rFinResumo();
+  if(tab==='adiant')rAdiant();
+  if(tab==='comis')rComis();
+  if(tab==='marmita')rMarmitas();
+}
+
+function rFin(){
+  const mAtual=mesAtualStr();
+  const adiantPend=adiant.filter(a=>a.status!=='quitado');
+  const totalAdiantPend=adiantPend.reduce((s,a)=>s+(parseFloat(a.valor)||0),0);
+  const comisMes=comissoes.filter(c=>c.data&&c.data.startsWith(mAtual));
+  const totalComisMes=comisMes.reduce((s,c)=>s+(parseFloat(c.valor)||0),0);
+  const marMes=marmitas.find(m=>m.mes===mAtual);
+  const totalMarmitaMes=marMes?(marMes.itens||[]).reduce((s,it)=>s+(it.qtdMarmita*cfgFin.valorMarmita)+(it.qtdCafe*cfgFin.valorCafe),0):0;
+  document.getElementById('fin-stats').innerHTML=
+    '<div class="sc"><div class="slbl">Adiantamentos em aberto</div><div class="sval a">R$ '+totalAdiantPend.toFixed(2).replace('.',',')+'</div></div>'+
+    '<div class="sc"><div class="slbl">Comissões no mês</div><div class="sval g">R$ '+totalComisMes.toFixed(2).replace('.',',')+'</div></div>'+
+    '<div class="sc"><div class="slbl">Marmitas/Cafés no mês</div><div class="sval b">R$ '+totalMarmitaMes.toFixed(2).replace('.',',')+'</div></div>'+
+    '<div class="sc"><div class="slbl">Funcionários ativos</div><div class="sval">'+funcs.filter(f=>f.status!=='Inativo').length+'</div></div>';
+  const meses=listaMeses();
+  const selFinMes=document.getElementById('fin-mes');
+  if(selFinMes&&!selFinMes.dataset.init){
+    selFinMes.innerHTML=meses.map(mk=>'<option value="'+mk+'"'+(mk===mAtual?' selected':'')+'>'+mesLabel(mk)+'</option>').join('');
+    selFinMes.dataset.init='1';
+  }
+  const selMarMes=document.getElementById('mar-mes');
+  if(selMarMes&&!selMarMes.dataset.init){
+    selMarMes.innerHTML=meses.map(mk=>'<option value="'+mk+'"'+(mk===mAtual?' selected':'')+'>'+mesLabel(mk)+'</option>').join('');
+    selMarMes.dataset.init='1';
+  }
+  document.getElementById('mar-vm').value=cfgFin.valorMarmita;
+  document.getElementById('mar-vc').value=cfgFin.valorCafe;
+  finTab('resumo');
+}
+
+// ── RESUMO DO MÊS ──
+function rFinResumo(){
+  const mk=document.getElementById('fin-mes').value||mesAtualStr();
+  const ativos=funcs.filter(f=>f.status!=='Inativo').sort((a,b)=>a.nome.localeCompare(b.nome));
+  const tb=document.getElementById('fin-resumo-tbody');
+  if(!ativos.length){tb.innerHTML='<tr><td colspan="5"><div class="empty"><p>Nenhum funcionário.</p></div></td></tr>';return;}
+  tb.innerHTML=ativos.map(f=>{
+    const sal=parseFloat(f.sal)||0;
+    const comisFunc=comissoes.filter(c=>c.fid===f.id&&c.data&&c.data.startsWith(mk));
+    const totalComis=comisFunc.reduce((s,c)=>s+(parseFloat(c.valor)||0),0);
+    const adiantFunc=adiant.filter(a=>a.fid===f.id&&((a.m1===mk)||(a.m2===mk)));
+    let totalAdiantMes=0;
+    adiantFunc.forEach(a=>{
+      const valorParcela=(parseFloat(a.valor)||0)/(a.parcelas||1);
+      if(a.m1===mk)totalAdiantMes+=valorParcela;
+      if(a.m2===mk)totalAdiantMes+=valorParcela;
+    });
+    const liquido=sal+totalComis-totalAdiantMes;
+    const c=ac(f.nome);
+    return '<tr>'+
+      '<td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="background:'+c.bg+';color:'+c.fg+';font-size:9px">'+ini(f.nome)+'</div><div style="font-weight:500;font-size:12px">'+f.nome+'</div></div></td>'+
+      '<td style="text-align:right;font-size:12px">'+(sal>0?'R$ '+sal.toFixed(2).replace('.',','):'<span style="color:var(--tx3)">não cadastrado</span>')+'</td>'+
+      '<td style="text-align:right;font-size:12px;color:var(--gr)">'+(totalComis>0?'+ R$ '+totalComis.toFixed(2).replace('.',','):'—')+'</td>'+
+      '<td style="text-align:right;font-size:12px;color:var(--rd)">'+(totalAdiantMes>0?'- R$ '+totalAdiantMes.toFixed(2).replace('.',','):'—')+'</td>'+
+      '<td style="text-align:right;font-size:13px;font-weight:600">R$ '+liquido.toFixed(2).replace('.',',')+'</td>'+
+    '</tr>';
+  }).join('');
+}
+
+function exportarResumoFin(){
+  const mk=document.getElementById('fin-mes').value||mesAtualStr();
+  const w=window.open('','_blank');
+  const logoEl=document.querySelector('.logo img');
+  let linhas='';
+  document.querySelectorAll('#fin-resumo-tbody tr').forEach(tr=>{linhas+=tr.outerHTML;});
+  w.document.write('<html><head><title>Resumo Financeiro - '+mesLabel(mk)+'</title>'+
+    '<style>body{font-family:Arial,sans-serif;padding:30px}h1{font-size:18px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #ddd;padding:8px;font-size:12px;text-align:left}th{background:#f5f5f5}</style>'+
+    '</head><body>'+
+    '<h1>Resumo Financeiro — '+mesLabel(mk)+'</h1>'+
+    '<p style="color:#888;font-size:11px">Agro Lazarini · Departamento Pessoal</p>'+
+    '<table><thead><tr><th>Funcionário</th><th>Salário</th><th>Comissões</th><th>Adiantamentos</th><th>Líquido estimado</th></tr></thead><tbody>'+linhas+'</tbody></table>'+
+    '</body></html>');
+  w.document.close();
+  setTimeout(function(){w.print();},300);
+}
+
+// ── ADIANTAMENTOS ──
+function adiToggleParcelas(){
+  const n=document.getElementById('adi-parc').value;
+  document.getElementById('adi-m2-wrap').style.display=n==='2'?'block':'none';
+}
+function abrirModalAdiant(fid){
+  document.getElementById('adi-eid').value='';
+  document.getElementById('adi-func').innerHTML=funcs.filter(f=>f.status!=='Inativo').map(f=>'<option value="'+f.id+'"'+(f.id===fid?' selected':'')+'>'+f.nome+'</option>').join('');
+  document.getElementById('adi-valor').value='';
+  document.getElementById('adi-data').value=HOJE.toISOString().split('T')[0];
+  document.getElementById('adi-parc').value='1';
+  const prox=new Date(HOJE.getFullYear(),HOJE.getMonth()+1,1);
+  document.getElementById('adi-m1').value=prox.getFullYear()+'-'+String(prox.getMonth()+1).padStart(2,'0');
+  document.getElementById('adi-m2-wrap').style.display='none';
+  document.getElementById('adi-obs').value='';
+  document.getElementById('modal-adiant').style.display='flex';
+}
+function fecharModalAdiant(){document.getElementById('modal-adiant').style.display='none';}
+function salvarAdiant(){
+  const fid=document.getElementById('adi-func').value;
+  const valor=parseFloat(document.getElementById('adi-valor').value)||0;
+  const data=document.getElementById('adi-data').value;
+  const parcelas=parseInt(document.getElementById('adi-parc').value)||1;
+  const m1=document.getElementById('adi-m1').value;
+  const m2=parcelas===2?document.getElementById('adi-m2').value:null;
+  const obs=document.getElementById('adi-obs').value.trim();
+  const eid=document.getElementById('adi-eid').value;
+  if(!fid||!valor||!data||!m1){alert('Preencha funcionário, valor, data e mês da 1ª parcela.');return;}
+  if(parcelas===2&&!m2){alert('Preencha o mês da 2ª parcela.');return;}
+  if(eid){
+    const idx=adiant.findIndex(function(a){return a.id===eid;});
+    if(idx>=0)adiant[idx]=Object.assign({},adiant[idx],{fid:fid,valor:valor,data:data,parcelas:parcelas,m1:m1,m2:m2,obs:obs});
+    toast('Adiantamento atualizado.');
+  }else{
+    adiant.push({id:'ad'+Date.now(),fid:fid,valor:valor,data:data,parcelas:parcelas,m1:m1,m2:m2,obs:obs,status:'pendente'});
+    toast('Adiantamento registrado.');
+  }
+  sv();fecharModalAdiant();rAdiant();
+}
+function editAdiant(id){
+  const a=adiant.find(function(x){return x.id===id;});if(!a)return;
+  document.getElementById('adi-eid').value=id;
+  document.getElementById('adi-func').innerHTML=funcs.filter(f=>f.status!=='Inativo').map(f=>'<option value="'+f.id+'"'+(f.id===a.fid?' selected':'')+'>'+f.nome+'</option>').join('');
+  document.getElementById('adi-valor').value=a.valor;
+  document.getElementById('adi-data').value=a.data;
+  document.getElementById('adi-parc').value=a.parcelas;
+  document.getElementById('adi-m1').value=a.m1;
+  document.getElementById('adi-m2-wrap').style.display=a.parcelas===2?'block':'none';
+  if(a.m2)document.getElementById('adi-m2').value=a.m2;
+  document.getElementById('adi-obs').value=a.obs||'';
+  document.getElementById('modal-adiant').style.display='flex';
+}
+function delAdiant(id){if(!confirm('Excluir este adiantamento?'))return;adiant=adiant.filter(function(a){return a.id!==id;});sv();toast('Removido.');rAdiant();}
+function toggleQuitadoAdiant(id){
+  const idx=adiant.findIndex(function(a){return a.id===id;});if(idx<0)return;
+  adiant[idx].status=adiant[idx].status==='quitado'?'pendente':'quitado';
+  sv();rAdiant();
+}
+function rAdiant(){
+  const sr=(document.getElementById('adi-s').value||'').toLowerCase();
+  const fs=document.getElementById('adi-st').value;
+  let list=adiant.slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
+  list=list.filter(function(a){
+    const f=funcs.find(function(x){return x.id===a.fid;});
+    if(sr&&(!f||!f.nome.toLowerCase().includes(sr)))return false;
+    if(fs&&a.status!==fs)return false;
+    return true;
+  });
+  const tb=document.getElementById('adi-tbody');
+  if(!list.length){tb.innerHTML='<tr><td colspan="6"><div class="empty"><p>Nenhum adiantamento registrado.</p></div></td></tr>';return;}
+  tb.innerHTML=list.map(function(a){
+    const f=funcs.find(function(x){return x.id===a.fid;});
+    const c=f?ac(f.nome):{bg:'#eee',fg:'#999'};
+    const parcTxt=a.parcelas===2?(mesLabel(a.m1)+' + '+mesLabel(a.m2)):mesLabel(a.m1);
+    const badge=a.status==='quitado'?'<span class="badge bok">Quitado</span>':'<span class="badge balerta">Pendente</span>';
+    return '<tr>'+
+      '<td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="background:'+c.bg+';color:'+c.fg+';font-size:9px">'+(f?ini(f.nome):'?')+'</div><div style="font-size:12px;font-weight:500">'+(f?f.nome:'(removido)')+'</div></div></td>'+
+      '<td style="font-size:11px">'+fd(a.data)+'</td>'+
+      '<td style="text-align:right;font-size:12px;font-weight:600">R$ '+(parseFloat(a.valor)||0).toFixed(2).replace('.',',')+'</td>'+
+      '<td style="font-size:11px;color:var(--tx3)">'+parcTxt+'</td>'+
+      '<td>'+badge+'</td>'+
+      '<td style="white-space:nowrap">'+
+        '<button class="bicon" title="Alternar status" onclick="toggleQuitadoAdiant(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></button>'+
+        '<button class="bicon" title="Editar" onclick="editAdiant(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+
+        '<button class="bicon" title="Excluir" onclick="delAdiant(\''+a.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+}
+
+// ── COMISSÕES ──
+function abrirModalComis(fid){
+  document.getElementById('com-eid').value='';
+  document.getElementById('com-func').innerHTML=funcs.filter(f=>f.status!=='Inativo').map(f=>'<option value="'+f.id+'"'+(f.id===fid?' selected':'')+'>'+f.nome+'</option>').join('');
+  document.getElementById('com-safra-sel').value='Soja';
+  document.getElementById('com-valor').value='';
+  document.getElementById('com-data').value=HOJE.toISOString().split('T')[0];
+  document.getElementById('com-obs').value='';
+  document.getElementById('modal-comis').style.display='flex';
+}
+function fecharModalComis(){document.getElementById('modal-comis').style.display='none';}
+function salvarComis(){
+  const fid=document.getElementById('com-func').value;
+  const safra=document.getElementById('com-safra-sel').value;
+  const valor=parseFloat(document.getElementById('com-valor').value)||0;
+  const data=document.getElementById('com-data').value;
+  const obs=document.getElementById('com-obs').value.trim();
+  const eid=document.getElementById('com-eid').value;
+  if(!fid||!valor||!data){alert('Preencha funcionário, valor e data.');return;}
+  let novoId=eid;
+  if(eid){
+    const idx=comissoes.findIndex(function(c){return c.id===eid;});
+    if(idx>=0)comissoes[idx]=Object.assign({},comissoes[idx],{fid:fid,safra:safra,valor:valor,data:data,obs:obs});
+    toast('Comissão atualizada.');
+  }else{
+    novoId='cm'+Date.now();
+    comissoes.push({id:novoId,fid:fid,safra:safra,valor:valor,data:data,obs:obs});
+    toast('Comissão registrada.');
+  }
+  sv();fecharModalComis();rComis();
+  gerarReciboComissao(novoId);
+}
+function editComis(id){
+  const c=comissoes.find(function(x){return x.id===id;});if(!c)return;
+  document.getElementById('com-eid').value=id;
+  document.getElementById('com-func').innerHTML=funcs.filter(f=>f.status!=='Inativo').map(f=>'<option value="'+f.id+'"'+(f.id===c.fid?' selected':'')+'>'+f.nome+'</option>').join('');
+  document.getElementById('com-safra-sel').value=c.safra;
+  document.getElementById('com-valor').value=c.valor;
+  document.getElementById('com-data').value=c.data;
+  document.getElementById('com-obs').value=c.obs||'';
+  document.getElementById('modal-comis').style.display='flex';
+}
+function delComis(id){if(!confirm('Excluir esta comissão?'))return;comissoes=comissoes.filter(function(c){return c.id!==id;});sv();toast('Removido.');rComis();}
+function rComis(){
+  const sr=(document.getElementById('com-s').value||'').toLowerCase();
+  const fsafra=document.getElementById('com-safra').value;
+  let list=comissoes.slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
+  list=list.filter(function(c){
+    const f=funcs.find(function(x){return x.id===c.fid;});
+    if(sr&&(!f||!f.nome.toLowerCase().includes(sr)))return false;
+    if(fsafra&&c.safra!==fsafra)return false;
+    return true;
+  });
+  const tb=document.getElementById('com-tbody');
+  if(!list.length){tb.innerHTML='<tr><td colspan="5"><div class="empty"><p>Nenhuma comissão registrada.</p></div></td></tr>';return;}
+  tb.innerHTML=list.map(function(c){
+    const f=funcs.find(function(x){return x.id===c.fid;});
+    const cc=f?ac(f.nome):{bg:'#eee',fg:'#999'};
+    return '<tr>'+
+      '<td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="background:'+cc.bg+';color:'+cc.fg+';font-size:9px">'+(f?ini(f.nome):'?')+'</div><div style="font-size:12px;font-weight:500">'+(f?f.nome:'(removido)')+'</div></div></td>'+
+      '<td><span class="badge" style="background:#EAF7F1;color:#0F6E56">'+c.safra+'</span></td>'+
+      '<td style="font-size:11px">'+fd(c.data)+'</td>'+
+      '<td style="text-align:right;font-size:12px;font-weight:600">R$ '+(parseFloat(c.valor)||0).toFixed(2).replace('.',',')+'</td>'+
+      '<td style="white-space:nowrap">'+
+        '<button class="bicon" title="Recibo" onclick="gerarReciboComissao(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></button>'+
+        '<button class="bicon" title="Editar" onclick="editComis(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'+
+        '<button class="bicon" title="Excluir" onclick="delComis(\''+c.id+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+}
+function gerarReciboComissao(id){
+  const c=comissoes.find(function(x){return x.id===id;});if(!c)return;
+  const f=funcs.find(function(x){return x.id===c.fid;});if(!f)return;
+  const logoEl=document.querySelector('.logo img');
+  const logoSrc=logoEl?logoEl.src:'';
+  const valorExtenso=(parseFloat(c.valor)||0).toFixed(2).replace('.',',');
+  const w=window.open('','_blank');
+  w.document.write('<html><head><title>Recibo de Comissão - '+f.nome+'</title>'+
+    '<style>'+
+      'body{font-family:Arial,sans-serif;padding:40px;color:#222}'+
+      '.hdr{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1D9E75;padding-bottom:16px;margin-bottom:24px}'+
+      '.hdr img{width:60px;height:60px;object-fit:contain}'+
+      '.hdr h1{font-size:16px;margin:0}.hdr p{font-size:11px;color:#888;margin:2px 0 0}'+
+      'h2{font-size:14px;text-align:center;margin:24px 0;text-transform:uppercase;letter-spacing:.05em}'+
+      'table{width:100%;border-collapse:collapse;margin:20px 0}'+
+      'td{padding:10px;border:1px solid #ddd;font-size:13px}'+
+      'td.lbl{background:#f7f7f5;font-weight:600;width:160px}'+
+      '.valor{font-size:22px;font-weight:700;text-align:center;color:#1D9E75;margin:24px 0}'+
+      '.assin{margin-top:60px;display:flex;justify-content:space-between}'+
+      '.assin div{width:45%;text-align:center;border-top:1px solid #333;padding-top:6px;font-size:11px}'+
+    '</style></head><body>'+
+    '<div class="hdr">'+(logoSrc?'<img src="'+logoSrc+'">':'')+'<div><h1>AGRO LAZARINI</h1><p>Departamento Pessoal</p></div></div>'+
+    '<h2>Recibo de Comissão</h2>'+
+    '<table>'+
+      '<tr><td class="lbl">Funcionário</td><td>'+f.nome+'</td></tr>'+
+      '<tr><td class="lbl">Cargo</td><td>'+(f.cargo||'—')+'</td></tr>'+
+      '<tr><td class="lbl">Safra</td><td>'+c.safra+'</td></tr>'+
+      '<tr><td class="lbl">Data</td><td>'+fd(c.data)+'</td></tr>'+
+      (c.obs?'<tr><td class="lbl">Observações</td><td>'+c.obs+'</td></tr>':'')+
+    '</table>'+
+    '<div class="valor">R$ '+valorExtenso+'</div>'+
+    '<p style="font-size:11px;color:#888;text-align:center">Recebi a quantia acima referente à comissão de safra discriminada.</p>'+
+    '<div class="assin">'+
+      '<div>'+f.nome+'<br>Funcionário</div>'+
+      '<div>Agro Lazarini<br>Empregador</div>'+
+    '</div>'+
+    '</body></html>');
+  w.document.close();
+  setTimeout(function(){w.print();},300);
+}
+
+// ── MARMITAS E CAFÉS ──
+function salvarCfgFin(){
+  cfgFin.valorMarmita=parseFloat(document.getElementById('mar-vm').value)||15;
+  cfgFin.valorCafe=parseFloat(document.getElementById('mar-vc').value)||5;
+  sv();rMarmitas();
+}
+function cozinheiras(){
+  return funcs.filter(function(f){return f.status!=='Inativo'&&(f.cargo||'').toLowerCase().includes('cozinh');});
+}
+function rMarmitas(){
+  const mk=document.getElementById('mar-mes').value||mesAtualStr();
+  let registro=marmitas.find(function(m){return m.mes===mk;});
+  if(!registro){registro={mes:mk,itens:[]};marmitas.push(registro);}
+  let coz=cozinheiras();
+  if(!coz.length)coz=funcs.filter(function(f){return f.status!=='Inativo';});
+  const tb=document.getElementById('mar-tbody');
+  tb.innerHTML=coz.map(function(f){
+    let item=registro.itens.find(function(it){return it.fid===f.id;});
+    if(!item){item={fid:f.id,qtdMarmita:0,qtdCafe:0};registro.itens.push(item);}
+    const total=(item.qtdMarmita*cfgFin.valorMarmita)+(item.qtdCafe*cfgFin.valorCafe);
+    const c=ac(f.nome);
+    return '<tr>'+
+      '<td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="background:'+c.bg+';color:'+c.fg+';font-size:9px">'+ini(f.nome)+'</div><div style="font-size:12px;font-weight:500">'+f.nome+'</div></div></td>'+
+      '<td style="text-align:center"><input type="number" min="0" value="'+item.qtdMarmita+'" style="width:70px;text-align:center;padding:4px;border:1px solid var(--bd2);border-radius:var(--r)" onchange="atualizarMarmita(\''+mk+'\',\''+f.id+'\',\'qtdMarmita\',this.value)"></td>'+
+      '<td style="text-align:center"><input type="number" min="0" value="'+item.qtdCafe+'" style="width:70px;text-align:center;padding:4px;border:1px solid var(--bd2);border-radius:var(--r)" onchange="atualizarMarmita(\''+mk+'\',\''+f.id+'\',\'qtdCafe\',this.value)"></td>'+
+      '<td style="text-align:right;font-weight:600;font-size:13px">R$ '+total.toFixed(2).replace('.',',')+'</td>'+
+    '</tr>';
+  }).join('');
+  sv();
+}
+function atualizarMarmita(mk,fid,campo,valor){
+  let registro=marmitas.find(function(m){return m.mes===mk;});
+  if(!registro){registro={mes:mk,itens:[]};marmitas.push(registro);}
+  let item=registro.itens.find(function(it){return it.fid===fid;});
+  if(!item){item={fid:fid,qtdMarmita:0,qtdCafe:0};registro.itens.push(item);}
+  item[campo]=parseFloat(valor)||0;
+  sv();rMarmitas();
+}
+
 
 // ═══════════════════ HOLERITES ═══════════════════
 function rHol(){
@@ -1278,6 +1777,8 @@ function processarHolerites(texto,pfx){
     if(fi>=0){
       if(!funcs[fi].cargo&&h.cargo)funcs[fi].cargo=h.cargo;
       if(!funcs[fi].admissao&&h.admissao)funcs[fi].admissao=h.admissao;
+      // Atualiza o salário com o valor mais recente do holerite (Salário Base)
+      if(h.salario_base>0)funcs[fi].sal=h.salario_base;
       // Só atualiza o id se ainda vazio E ninguém mais usa esse id
       if(!funcs[fi].id&&h.id&&!funcs.some((f,i)=>i!==fi&&f.id===h.id))funcs[fi].id=h.id;
     }
@@ -1306,7 +1807,7 @@ function extrairHolerite(pag){
 
   const linhas=pag.split('\n').map(l=>l.trim()).filter(Boolean);
   const txt=linhas.join(' ');
-  const h={nome:'',id:'',cargo:'',admissao:'',competencia:'',salario_bruto:0,inss:0,irrf:0,fgts:0,outros_descontos:0,outros_proventos:0,liquido:0,verbas:[]};
+  const h={nome:'',id:'',cargo:'',admissao:'',competencia:'',salario_bruto:0,salario_base:0,inss:0,irrf:0,fgts:0,outros_descontos:0,outros_proventos:0,liquido:0,verbas:[]};
 
   // ── Competência: "Mensalista Maio de 2026" ──
   const MESES={janeiro:'01',fevereiro:'02',marco:'03',abril:'04',maio:'05',junho:'06',julho:'07',agosto:'08',setembro:'09',outubro:'10',novembro:'11',dezembro:'12'};
@@ -1428,6 +1929,17 @@ function extrairHolerite(pag){
       const mF=linhas[i].match(/F\.G\.T\.S\s+do\s+M[eê]s\s+([\d.]+,\d{2})/i);
       if(mF)h.fgts=pNum(mF[1]);
     }
+    // Salário Base: "Salário Base 3.257,00" (pode estar inline ou em coluna)
+    if(/Sal[aá]rio\s+Base/i.test(linhas[i])&&!h.salario_base){
+      const mSB=linhas[i].match(/Sal[aá]rio\s+Base\s+([\d.]+,\d{2})/i);
+      if(mSB)h.salario_base=pNum(mSB[1]);
+      else{
+        // Pode estar na linha seguinte (formato pdf.js separa label de valor)
+        for(let j=i+1;j<Math.min(i+4,linhas.length);j++){
+          if(/^[\d.]+,\d{2}$/.test(linhas[j])){h.salario_base=pNum(linhas[j]);break;}
+        }
+      }
+    }
   }
 
   // Fallback: após "Faixa IRRF" os 3 valores >= 100 são bruto, desc, liq
@@ -1446,6 +1958,7 @@ function extrairHolerite(pag){
 
   // Último fallback: calcula pelas verbas
   if(!h.salario_bruto){const tp=h.verbas.filter(v=>v.tipo==='provento').reduce((s,v)=>s+v.valor,0);if(tp>0)h.salario_bruto=tp;}
+  if(!h.salario_base)h.salario_base=h.salario_bruto;
   if(!h.liquido&&h.salario_bruto>0){const td=h.verbas.filter(v=>v.tipo==='desconto').reduce((s,v)=>s+v.valor,0);if(td>0)h.liquido=Math.round((h.salario_bruto-td)*100)/100;}
 
   return h.nome?h:null;
@@ -1559,8 +2072,19 @@ function rPlan(anoSel){
         const bor=isVenda||isAcum(f)?'#FDE68A':c.bg;
         const nome=f.nome.split(' ')[0]+' '+f.nome.split(' ').slice(-1)[0];
         const periodo=e.ini&&e.fim?` · ${e.ini.split('-')[2]}/${e.fim.split('-')[2]}`:'';
+        // Cálculo do valor da venda de férias: salário ÷ 30 × dias × 1,333 (1/3 constitucional)
+        let valorVenda='';
+        if(isVenda&&e.dias){
+          const sal=parseFloat(f.sal)||0;
+          if(sal>0){
+            const valor=(sal/30)*e.dias*(4/3);
+            valorVenda=` · R$ ${valor.toFixed(2).replace('.',',')}`;
+          }else{
+            valorVenda=' · sem salário cadastrado';
+          }
+        }
         return`<div style="background:${bg};border:1px solid ${bor};border-radius:6px;padding:5px 8px;font-size:11px;font-weight:500;color:${cor};display:flex;align-items:center;gap:4px">
-          <span style="flex:1">${isVenda?'💰':''}${nome}${e.dias?' · '+e.dias+'d':''}${periodo}</span>
+          <span style="flex:1">${isVenda?'💰':''}${nome}${e.dias?' · '+e.dias+'d':''}${periodo}${valorVenda}</span>
           <label style="display:flex;align-items:center;gap:3px;font-size:10px;cursor:pointer;font-weight:400;white-space:nowrap;opacity:.8">
             <input type="checkbox" ${isVenda?'checked':''} onchange="planToggleVenda('${e.fid}','${mesKey}',${ei},this.checked)" style="cursor:pointer">💰
           </label>
