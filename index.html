@@ -1778,7 +1778,8 @@ function processarHolerites(texto,pfx){
       if(!funcs[fi].cargo&&h.cargo)funcs[fi].cargo=h.cargo;
       if(!funcs[fi].admissao&&h.admissao)funcs[fi].admissao=h.admissao;
       // Atualiza o salário com o valor mais recente do holerite (Salário Base)
-      if(h.salario_base>0)funcs[fi].sal=h.salario_base;
+      if(h.liquido>0)funcs[fi].sal=h.liquido;
+      else if(h.salario_base>0)funcs[fi].sal=h.salario_base;
       // Só atualiza o id se ainda vazio E ninguém mais usa esse id
       if(!funcs[fi].id&&h.id&&!funcs.some((f,i)=>i!==fi&&f.id===h.id))funcs[fi].id=h.id;
     }
