@@ -232,6 +232,7 @@ tbody td{padding:9px 12px;vertical-align:middle}
 <main class="main">
   <div class="topbar">
     <div><div class="ttl" id="ttl">Visão geral</div><div class="tsub" id="tsub">Resumo do departamento pessoal</div></div>
+    <div id="topbar-actions"></div>
   </div>
 
   <!-- DASHBOARD -->
@@ -337,7 +338,7 @@ tbody td{padding:9px 12px;vertical-align:middle}
       <input type="text" id="ferS" placeholder="Buscar funcionário..." oninput="rFer()">
       <select id="ferSt" onchange="rFer()"><option value="">Todos</option><option value="vencida">Vencida</option><option value="alerta">Próx. vencimento</option><option value="acumulado">Acumulado</option><option value="gozo">Em gozo</option><option value="ok">Em dia</option></select>
       <div class="mla" style="display:flex;gap:7px">
-        <button class="btn" onclick="expFer()">Exportar CSV</button>
+        <button class="btn" onclick="expFer()">📄 Exportar PDF</button>
         <button class="btn btn-g" onclick="go('lancar')">Lançar gozo</button>
       </div>
     </div>
@@ -723,7 +724,7 @@ function go(p,param){
   const m=PM[p]||{};
   document.getElementById('ttl').textContent=m.t||p;
   document.getElementById('tsub').textContent=m.s||'';
-  if(p==='dashboard')rD();
+  if(p==='dashboard'){rD();document.getElementById('topbar-actions').innerHTML='<button class="btn" onclick="expDashPDF()">📄 Exportar relatório</button>';}else{document.getElementById('topbar-actions').innerHTML='';}
   if(p==='funcionarios')rF();
   if(p==='ferias')rFer();
   if(p==='lancar')rLan();
@@ -763,6 +764,73 @@ function drawBar(canvasId,labels,values,color){
     if(values[i])ctx.fillText(values[i],x+bw/2,H-pad-bh-4);
   });
 }
+function expDashPDF(){
+  const w=window.open('','_blank');
+  const logoEl=document.querySelector('.logo img');
+  const logoSrc=logoEl?logoEl.src:'';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const atv=funcs.filter(f=>f.status!=='Inativo');
+  const inav=funcs.filter(f=>f.status==='Inativo');
+
+  // Férias por status
+  let fVenc=0,fAl=0,fOk=0,fGozo=0;
+  atv.forEach(f=>(f.periodos||[]).forEach(p=>{const s=cP(p,f.id);if(s.s==='vencida')fVenc++;else if(s.s==='alerta')fAl++;else if(s.s==='gozo')fGozo++;else fOk++;}));
+
+  // ASOs por status
+  let aVenc=0,aAl=0,aOk=0,aSem=0;
+  atv.forEach(f=>{const s=cAso(f);if(s==='vencido')aVenc++;else if(s==='alerta')aAl++;else if(s==='ok')aOk++;else aSem++;});
+
+  // Tabela de funcionários com férias e ASO
+  const linhasFuncs=atv.sort((a,b)=>a.nome.localeCompare(b.nome)).map(f=>{
+    const ult=ultimoAso(f.id);
+    const sa=cAso(f);
+    const asoTxt=sa==='vencido'?'<span style="color:#C0392B">Vencido</span>':sa==='alerta'?'<span style="color:#BA7517">Próx. venc.</span>':sa==='ok'?'<span style="color:#1D9E75">Em dia</span>':'Sem ASO';
+    const pers=(f.periodos||[]).map(p=>{const s=cP(p,f.id);const cor={vencida:'#C0392B',alerta:'#BA7517',ok:'#1D9E75',gozo:'#2563EB'}[s.s]||'#333';return`<div style="font-size:10px">${fd(p.ini)}–${fd(p.fim)} <span style="color:${cor};font-weight:600">${s.l}</span> (${s.sd}d)</div>`;}).join('');
+    return`<tr>
+      <td style="font-weight:600">${f.nome}<br><span style="font-size:10px;color:#888;font-weight:400">${f.cargo||'—'} · Adm: ${fd(f.admissao)}</span></td>
+      <td>${pers||'<span style="color:#888">Sem período</span>'}</td>
+      <td>${asoTxt}<br><span style="font-size:10px;color:#888">${ult?fd(ult.validade):''}</span></td>
+    </tr>`;
+  }).join('');
+
+  w.document.write(`<html><head><title>Relatório Geral - ${hoje}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:30px;font-size:12px;color:#222}
+      .hdr{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1D9E75;padding-bottom:12px;margin-bottom:20px}
+      .hdr img{width:50px;height:50px;object-fit:contain}
+      h1{font-size:16px;margin:0}.sub{font-size:11px;color:#888;margin:2px 0 0}
+      h2{font-size:13px;margin:24px 0 10px;color:#1D9E75;border-bottom:1px solid #eee;padding-bottom:4px}
+      .cards{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+      .card{border:1px solid #ddd;border-radius:8px;padding:12px 16px;min-width:120px}
+      .card .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em}
+      .card .val{font-size:22px;font-weight:700;margin-top:4px}
+      .r{color:#C0392B}.a{color:#BA7517}.g{color:#1D9E75}
+      table{width:100%;border-collapse:collapse}
+      th{background:#f5f5f0;padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#666;border-bottom:2px solid #ddd}
+      td{padding:8px;border-bottom:1px solid #eee;font-size:11px;vertical-align:top}
+      @media print{body{padding:15px}.cards{page-break-inside:avoid}}
+    </style></head><body>
+    <div class="hdr">${logoSrc?'<img src="'+logoSrc+'">' :''}<div><h1>Relatório Geral — Departamento Pessoal</h1><p class="sub">Agro Lazarini · Emitido em ${hoje}</p></div></div>
+
+    <h2>Resumo</h2>
+    <div class="cards">
+      <div class="card"><div class="lbl">Colaboradores ativos</div><div class="val">${atv.length}</div></div>
+      <div class="card"><div class="lbl">Férias vencidas</div><div class="val r">${fVenc}</div></div>
+      <div class="card"><div class="lbl">Férias próx. venc.</div><div class="val a">${fAl}</div></div>
+      <div class="card"><div class="lbl">ASOs vencidos</div><div class="val r">${aVenc}</div></div>
+      <div class="card"><div class="lbl">ASOs próx. venc.</div><div class="val a">${aAl}</div></div>
+      <div class="card"><div class="lbl">ASOs em dia</div><div class="val g">${aOk}</div></div>
+      <div class="card"><div class="lbl">Sem ASO</div><div class="val">${aSem}</div></div>
+    </div>
+
+    <h2>Funcionários — Férias e ASOs</h2>
+    <table><thead><tr><th>Funcionário</th><th>Períodos Aquisitivos</th><th>ASO</th></tr></thead>
+    <tbody>${linhasFuncs}</tbody></table>
+    </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),400);
+}
+
 function rD(){
   const atv=funcs.filter(f=>f.status!=='Inativo').length;
   let fv=0,fal=0,fg=0,fok=0;
@@ -1478,7 +1546,46 @@ function dlTodos(){const fm=(document.getElementById('hfmes')||{}).value||'';con
 
 // ═══════════════════ EXPORTAÇÕES ═══════════════════
 function expF(){const r=[['Código','Nome','CPF','Setor','Cargo','Admissão','Status']];funcs.forEach(f=>r.push([f.id,f.nome,f.cpf,f.setor,f.cargo,fd(f.admissao),f.status||'Ativo']));csvDl(r,'funcionarios.csv');}
-function expFer(){const r=[['Código','Nome','Período início','Período fim','Limite','Saldo','Status']];funcs.forEach(f=>(f.periodos||[]).forEach(p=>{const s=cP(p,f.id);r.push([f.id,f.nome,fd(p.ini),fd(p.fim),fd(p.limite),s.sd,s.l]);}));csvDl(r,'ferias.csv');}
+function expFer(){
+  const w=window.open('','_blank');
+  const logoEl=document.querySelector('.logo img');
+  const logoSrc=logoEl?logoEl.src:'';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  let linhas='';
+  const statusCor={vencida:'#C0392B',alerta:'#BA7517',ok:'#1D9E75',gozo:'#2563EB',acumulado:'#92400E'};
+  funcs.filter(f=>f.status!=='Inativo').sort((a,b)=>a.nome.localeCompare(b.nome)).forEach(f=>{
+    (f.periodos||[]).forEach((p,i)=>{
+      const s=cP(p,f.id);
+      const cor=statusCor[s.s]||'#333';
+      linhas+=`<tr>
+        ${i===0?`<td rowspan="${(f.periodos||[]).length}" style="font-weight:600;vertical-align:top;padding-top:10px">${f.nome}<br><span style="font-size:10px;color:#888;font-weight:400">${f.id} · ${f.cargo||'—'}</span></td>`:''}
+        <td>${fd(p.ini)} – ${fd(p.fim)}</td>
+        <td>${fd(p.limite)}</td>
+        <td style="text-align:center;font-weight:600">${s.sd}</td>
+        <td style="color:${cor};font-weight:600">${s.l}</td>
+      </tr>`;
+    });
+  });
+  w.document.write(`<html><head><title>Programação de Férias</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:30px;font-size:12px;color:#222}
+      .hdr{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1D9E75;padding-bottom:12px;margin-bottom:20px}
+      .hdr img{width:50px;height:50px;object-fit:contain}
+      h1{font-size:16px;margin:0}
+      .sub{font-size:11px;color:#888;margin:2px 0 0}
+      table{width:100%;border-collapse:collapse;margin-top:10px}
+      th{background:#f5f5f0;padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#666;border-bottom:2px solid #ddd}
+      td{padding:8px;border-bottom:1px solid #eee;font-size:11px;vertical-align:middle}
+      tr:last-child td{border-bottom:none}
+      @media print{body{padding:15px}}
+    </style></head><body>
+    <div class="hdr">${logoSrc?'<img src="'+logoSrc+'">' :''}<div><h1>Programação de Férias</h1><p class="sub">Agro Lazarini · Emitido em ${hoje}</p></div></div>
+    <table><thead><tr><th>Funcionário</th><th>Período Aquisitivo</th><th>Limite p/ Gozo</th><th>Saldo</th><th>Status</th></tr></thead>
+    <tbody>${linhas}</tbody></table>
+    </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),400);
+}
 function csvDl(r,fn){const csv=r.map(x=>x.map(c=>`"${(c||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));a.download=fn;a.click();}
 
 // ═══════════════════ GERAR PDF HOLERITE ═══════════════════
@@ -1715,15 +1822,21 @@ function processarFerias(texto,pfx){
 }
 
 function xSaldo(txt){
-  // Padrão BS: após pontos ".... SALDO 0 30 DATA"
+  // Padrão BS: ".... .... .... DIAS_DIR 0 30 DATA_LIMITE"
+  // Após os pontos, o primeiro número é sempre os dias de direito
   const ap=txt.replace(/.*\.{3,}/,'');
   if(ap!==txt){
-    const ns=[...ap.matchAll(/(\d{1,2}(?:[,\.]\d)?)\b/g)].map(m=>parseFloat(m[1].replace(',','.')));
+    // Pega todos os números inteiros ou decimais no trecho após os pontos
+    const ns=[...ap.matchAll(/\b(\d{1,2}(?:[,\.]\d{1,2})?)\b/g)].map(m=>parseFloat(m[1].replace(',','.')));
+    // O primeiro número >0 e <=30 é o saldo de dias de direito
     const v=ns.find(n=>n>0&&n<=30);
     if(v!==undefined)return v;
   }
-  // Fallback geral
-  const ns=[...txt.matchAll(/\b(\d{1,2}(?:[,\.]\d)?)\b/g)].map(m=>parseFloat(m[1].replace(',','.')));
+  // Fallback: procura padrão "N 0 30" onde N é o saldo
+  const mPad=txt.match(/(\d{1,2}(?:[,\.]\d{1,2})?)\s+0\s+30\b/);
+  if(mPad)return parseFloat(mPad[1].replace(',','.'));
+  // Fallback geral: primeiro número entre 1 e 30
+  const ns=[...txt.matchAll(/\b(\d{1,2}(?:[,\.]\d{1,2})?)\b/g)].map(m=>parseFloat(m[1].replace(',','.')));
   const c=ns.filter(n=>n>0&&n<=30);
   const fr=c.find(n=>n!==Math.floor(n));
   return fr!==undefined?fr:(c[0]||30);
