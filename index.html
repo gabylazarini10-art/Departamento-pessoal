@@ -561,13 +561,17 @@ tbody td{padding:9px 12px;vertical-align:middle}
         <div class="fc"><label>Data do adiantamento</label><input type="date" id="adi-data"></div>
         <div class="fc"><label>Descontar em</label>
           <select id="adi-parc" onchange="adiToggleParcelas()">
-            <option value="1">1 parcela (mês seguinte)</option>
+            <option value="1">1 parcela</option>
             <option value="2">2 parcelas</option>
+            <option value="3">3 parcelas</option>
+            <option value="4">4 parcelas</option>
           </select>
         </div>
         <div class="fg" id="adi-parc-datas">
           <div class="fc"><label>Mês 1ª parcela</label><input type="month" id="adi-m1"></div>
           <div class="fc" id="adi-m2-wrap" style="display:none"><label>Mês 2ª parcela</label><input type="month" id="adi-m2"></div>
+          <div class="fc" id="adi-m3-wrap" style="display:none"><label>Mês 3ª parcela</label><input type="month" id="adi-m3"></div>
+          <div class="fc" id="adi-m4-wrap" style="display:none"><label>Mês 4ª parcela</label><input type="month" id="adi-m4"></div>
         </div>
         <div class="fc"><label>Observações</label><input type="text" id="adi-obs"></div>
       </div>
@@ -1229,12 +1233,11 @@ function rFinResumo(){
     const sal=parseFloat(f.sal)||0;
     const comisFunc=comissoes.filter(c=>c.fid===f.id&&c.data&&c.data.startsWith(mk));
     const totalComis=comisFunc.reduce((s,c)=>s+(parseFloat(c.valor)||0),0);
-    const adiantFunc=adiant.filter(a=>a.fid===f.id&&((a.m1===mk)||(a.m2===mk)));
+    const adiantFunc=adiant.filter(a=>a.fid===f.id&&([a.m1,a.m2,a.m3,a.m4].includes(mk)));
     let totalAdiantMes=0;
     adiantFunc.forEach(a=>{
       const valorParcela=(parseFloat(a.valor)||0)/(a.parcelas||1);
-      if(a.m1===mk)totalAdiantMes+=valorParcela;
-      if(a.m2===mk)totalAdiantMes+=valorParcela;
+      [a.m1,a.m2,a.m3,a.m4].forEach(m=>{if(m===mk)totalAdiantMes+=valorParcela;});
     });
     const liquido=sal+totalComis-totalAdiantMes;
     const c=ac(f.nome);
@@ -1267,8 +1270,10 @@ function exportarResumoFin(){
 
 // ── ADIANTAMENTOS ──
 function adiToggleParcelas(){
-  const n=document.getElementById('adi-parc').value;
-  document.getElementById('adi-m2-wrap').style.display=n==='2'?'block':'none';
+  const n=parseInt(document.getElementById('adi-parc').value);
+  document.getElementById('adi-m2-wrap').style.display=n>=2?'block':'none';
+  document.getElementById('adi-m3-wrap').style.display=n>=3?'block':'none';
+  document.getElementById('adi-m4-wrap').style.display=n>=4?'block':'none';
 }
 function abrirModalAdiant(fid){
   document.getElementById('adi-eid').value='';
@@ -1279,6 +1284,8 @@ function abrirModalAdiant(fid){
   const prox=new Date(HOJE.getFullYear(),HOJE.getMonth()+1,1);
   document.getElementById('adi-m1').value=prox.getFullYear()+'-'+String(prox.getMonth()+1).padStart(2,'0');
   document.getElementById('adi-m2-wrap').style.display='none';
+  document.getElementById('adi-m3-wrap').style.display='none';
+  document.getElementById('adi-m4-wrap').style.display='none';
   document.getElementById('adi-obs').value='';
   document.getElementById('modal-adiant').style.display='flex';
 }
@@ -1289,17 +1296,21 @@ function salvarAdiant(){
   const data=document.getElementById('adi-data').value;
   const parcelas=parseInt(document.getElementById('adi-parc').value)||1;
   const m1=document.getElementById('adi-m1').value;
-  const m2=parcelas===2?document.getElementById('adi-m2').value:null;
+  const m2=parcelas>=2?document.getElementById('adi-m2').value:null;
+  const m3=parcelas>=3?document.getElementById('adi-m3').value:null;
+  const m4=parcelas>=4?document.getElementById('adi-m4').value:null;
   const obs=document.getElementById('adi-obs').value.trim();
   const eid=document.getElementById('adi-eid').value;
   if(!fid||!valor||!data||!m1){alert('Preencha funcionário, valor, data e mês da 1ª parcela.');return;}
-  if(parcelas===2&&!m2){alert('Preencha o mês da 2ª parcela.');return;}
+  if(parcelas>=2&&!m2){alert('Preencha o mês da 2ª parcela.');return;}
+  if(parcelas>=3&&!m3){alert('Preencha o mês da 3ª parcela.');return;}
+  if(parcelas>=4&&!m4){alert('Preencha o mês da 4ª parcela.');return;}
   if(eid){
     const idx=adiant.findIndex(function(a){return a.id===eid;});
-    if(idx>=0)adiant[idx]=Object.assign({},adiant[idx],{fid:fid,valor:valor,data:data,parcelas:parcelas,m1:m1,m2:m2,obs:obs});
+    if(idx>=0)adiant[idx]=Object.assign({},adiant[idx],{fid:fid,valor:valor,data:data,parcelas:parcelas,m1:m1,m2:m2,m3:m3,m4:m4,obs:obs});
     toast('Adiantamento atualizado.');
   }else{
-    adiant.push({id:'ad'+Date.now(),fid:fid,valor:valor,data:data,parcelas:parcelas,m1:m1,m2:m2,obs:obs,status:'pendente'});
+    adiant.push({id:'ad'+Date.now(),fid:fid,valor:valor,data:data,parcelas:parcelas,m1:m1,m2:m2,m3:m3,m4:m4,obs:obs,status:'pendente'});
     toast('Adiantamento registrado.');
   }
   sv();fecharModalAdiant();rAdiant();
@@ -1312,8 +1323,12 @@ function editAdiant(id){
   document.getElementById('adi-data').value=a.data;
   document.getElementById('adi-parc').value=a.parcelas;
   document.getElementById('adi-m1').value=a.m1;
-  document.getElementById('adi-m2-wrap').style.display=a.parcelas===2?'block':'none';
+  document.getElementById('adi-m2-wrap').style.display=a.parcelas>=2?'block':'none';
+  document.getElementById('adi-m3-wrap').style.display=a.parcelas>=3?'block':'none';
+  document.getElementById('adi-m4-wrap').style.display=a.parcelas>=4?'block':'none';
   if(a.m2)document.getElementById('adi-m2').value=a.m2;
+  if(a.m3)document.getElementById('adi-m3').value=a.m3;
+  if(a.m4)document.getElementById('adi-m4').value=a.m4;
   document.getElementById('adi-obs').value=a.obs||'';
   document.getElementById('modal-adiant').style.display='flex';
 }
@@ -1338,7 +1353,8 @@ function rAdiant(){
   tb.innerHTML=list.map(function(a){
     const f=funcs.find(function(x){return x.id===a.fid;});
     const c=f?ac(f.nome):{bg:'#eee',fg:'#999'};
-    const parcTxt=a.parcelas===2?(mesLabel(a.m1)+' + '+mesLabel(a.m2)):mesLabel(a.m1);
+    const meses=[a.m1,a.m2,a.m3,a.m4].filter(Boolean).slice(0,a.parcelas).map(m=>mesLabel(m));
+    const parcTxt=meses.join(' + ');
     const badge=a.status==='quitado'?'<span class="badge bok">Quitado</span>':'<span class="badge balerta">Pendente</span>';
     return '<tr>'+
       '<td><div style="display:flex;align-items:center;gap:7px"><div class="av" style="background:'+c.bg+';color:'+c.fg+';font-size:9px">'+(f?ini(f.nome):'?')+'</div><div style="font-size:12px;font-weight:500">'+(f?f.nome:'(removido)')+'</div></div></td>'+
