@@ -569,10 +569,10 @@ tbody td{padding:9px 12px;vertical-align:middle}
           </select>
         </div>
         <div class="fg" id="adi-parc-datas">
-          <div class="fc"><label>Mês 1ª parcela</label><input type="month" id="adi-m1"></div>
-          <div class="fc" id="adi-m2-wrap" style="display:none"><label>Mês 2ª parcela</label><input type="month" id="adi-m2"></div>
-          <div class="fc" id="adi-m3-wrap" style="display:none"><label>Mês 3ª parcela</label><input type="month" id="adi-m3"></div>
-          <div class="fc" id="adi-m4-wrap" style="display:none"><label>Mês 4ª parcela</label><input type="month" id="adi-m4"></div>
+          <div class="fc"><label>Data 1ª parcela</label><input type="date" id="adi-m1"></div>
+          <div class="fc" id="adi-m2-wrap" style="display:none"><label>Data 2ª parcela</label><input type="date" id="adi-m2"></div>
+          <div class="fc" id="adi-m3-wrap" style="display:none"><label>Data 3ª parcela</label><input type="date" id="adi-m3"></div>
+          <div class="fc" id="adi-m4-wrap" style="display:none"><label>Data 4ª parcela</label><input type="date" id="adi-m4"></div>
         </div>
         <div class="fc"><label>Observações</label><input type="text" id="adi-obs"></div>
       </div>
@@ -1241,11 +1241,12 @@ function rFinResumo(){
     const sal=parseFloat(f.sal)||0;
     const comisFunc=comissoes.filter(c=>c.fid===f.id&&c.data&&c.data.startsWith(mk));
     const totalComis=comisFunc.reduce((s,c)=>s+(parseFloat(c.valor)||0),0);
-    const adiantFunc=adiant.filter(a=>a.fid===f.id&&([a.m1,a.m2,a.m3,a.m4].includes(mk)));
+    // Pega adiantamentos com parcela no mês selecionado (compara pelo início do mês da data)
+    const adiantFunc=adiant.filter(a=>a.fid===f.id&&[a.m1,a.m2,a.m3,a.m4].some(m=>m&&m.substring(0,7)===mk));
     let totalAdiantMes=0;
     adiantFunc.forEach(a=>{
       const valorParcela=(parseFloat(a.valor)||0)/(a.parcelas||1);
-      [a.m1,a.m2,a.m3,a.m4].forEach(m=>{if(m===mk)totalAdiantMes+=valorParcela;});
+      [a.m1,a.m2,a.m3,a.m4].forEach(m=>{if(m&&m.substring(0,7)===mk)totalAdiantMes+=valorParcela;});
     });
     const liquido=sal+totalComis-totalAdiantMes;
     const c=ac(f.nome);
@@ -1289,8 +1290,8 @@ function abrirModalAdiant(fid){
   document.getElementById('adi-valor').value='';
   document.getElementById('adi-data').value=HOJE.toISOString().split('T')[0];
   document.getElementById('adi-parc').value='1';
-  const prox=new Date(HOJE.getFullYear(),HOJE.getMonth()+1,1);
-  document.getElementById('adi-m1').value=prox.getFullYear()+'-'+String(prox.getMonth()+1).padStart(2,'0');
+  const prox=new Date(HOJE.getFullYear(),HOJE.getMonth()+1,5);
+  document.getElementById('adi-m1').value=prox.toISOString().split('T')[0];
   document.getElementById('adi-m2-wrap').style.display='none';
   document.getElementById('adi-m3-wrap').style.display='none';
   document.getElementById('adi-m4-wrap').style.display='none';
@@ -1348,13 +1349,13 @@ function toggleQuitadoAdiant(id){
 }
 // Calcula parcelas já descontadas (meses que já passaram) e valor restante
 function calcAdiant(a){
-  const mesAtual=mesAtualStr();
+  const hojeStr=HOJE.toISOString().split('T')[0];
   const mesesParc=[a.m1,a.m2,a.m3,a.m4].filter(Boolean).slice(0,a.parcelas);
   const valorParc=(parseFloat(a.valor)||0)/(a.parcelas||1);
-  const pagas=mesesParc.filter(m=>m<=mesAtual).length;
+  // Parcela considerada paga se a data dela já passou (<=hoje)
+  const pagas=mesesParc.filter(m=>m<=hojeStr).length;
   const pagas_val=pagas*valorParc;
   const restante=(mesesParc.length-pagas)*valorParc;
-  // Auto-quita se todos os meses já passaram e não foi manualmente marcado pendente
   const autoQuitado=pagas>=mesesParc.length;
   return {valorParc, pagas, total:mesesParc.length, pagas_val, restante, autoQuitado, mesesParc};
 }
@@ -1378,12 +1379,15 @@ function rAdiant(){
     const calc=calcAdiant(a);
     const isQuit=a.status==='quitado'||calc.autoQuitado;
     // Parcelas coloridas: passadas=verde, atual=amarelo, futuras=cinza
+    const hojeStr2=HOJE.toISOString().split('T')[0];
     const mesesHtml=calc.mesesParc.map(function(m){
       let cor,icone='';
-      if(m<mesAtual){cor='color:#1D9E75;font-weight:600';icone='✓ ';}
-      else if(m===mesAtual){cor='color:#BA7517;font-weight:600';}
+      if(m<=hojeStr2){cor='color:#1D9E75;font-weight:600';icone='✓ ';}
+      else if(m.substring(0,7)===mesAtualStr()){cor='color:#BA7517;font-weight:600';}
       else{cor='color:var(--tx3)';}
-      return '<span style="'+cor+';font-size:10px;white-space:nowrap">'+icone+mesLabel(m)+'</span>';
+      const p=m.split('-');
+      const dataFmt=p.length===3?p[2]+'/'+p[1]+'/'+p[0]:m;
+      return '<span style="'+cor+';font-size:10px;white-space:nowrap">'+icone+dataFmt+'</span>';
     }).join('<span style="color:var(--tx3);margin:0 3px">+</span>');
     const badge=isQuit?'<span class="badge bok">Quitado</span>':'<span class="badge balerta">Pendente</span>';
     const valorParc='R$ '+calc.valorParc.toFixed(2).replace('.',',');
