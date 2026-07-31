@@ -708,7 +708,8 @@ function ini(n){const p=n.trim().split(' ');return(p[0][0]+(p[p.length-1][0]||''
 const CL=['#5B5FD4','#1D9E75','#D85A30','#BA7517','#7C3AED','#C0392B','#2563EB','#0F6E56'];
 const CB=['#EEEDFE','#EAF7F1','#FAECE7','#FDF3E0','#F3EFFE','#FDECEA','#EFF4FE','#EAF7F1'];
 function ac(n){let h=0;for(let c of n)h=(h*31+c.charCodeAt(0))%CL.length;return{bg:CB[h],fg:CL[h]};}
-function norm(s){return(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+function norm(s){return(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
+function fBRL(v){return'R$ '+(parseFloat(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function pBR(s){if(!s)return null;const p=s.split('/');if(p.length!==3)return null;return`${p[2].length===2?'20'+p[2]:p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 
@@ -794,6 +795,15 @@ function drawBar(canvasId,labels,values,color){
     if(values[i])ctx.fillText(values[i],x+bw/2,H-pad-bh-4);
   });
 }
+function mostrarSemHolerite(){
+  const mesAtualHol=String(HOJE.getMonth()+1).padStart(2,'0')+'/'+HOJE.getFullYear();
+  const comHol=new Set(hols.filter(h=>h.competencia===mesAtualHol).map(h=>norm(h.nome)));
+  const semHol=funcs.filter(f=>f.status!=='Inativo'&&!comHol.has(norm(f.nome)));
+  if(!semHol.length){toast('Todos os funcionários ativos têm holerite neste mês! ✓');return;}
+  const nomes=semHol.map(f=>'• '+f.nome).join('\n');
+  alert('Sem holerite em '+mesAtualHol+':\n\n'+nomes);
+}
+
 function expDashPDF(){
   const w=window.open('','_blank');
   const logoEl=document.querySelector('.logo img');
@@ -871,8 +881,12 @@ function rD(){
   let av2=0,aal=0,aok=0,asem=0;
   funcsAtivos.forEach(f=>{const sa=cAso(f);if(sa==='vencido')av2++;else if(sa==='alerta')aal++;else if(sa==='ok')aok++;else asem++;});
   const mes=HOJE.getMonth()+1;
+  // Funcionários ativos sem holerite no mês atual
+  const mesAtualHol=String(HOJE.getMonth()+1).padStart(2,'0')+'/'+HOJE.getFullYear();
+  const comHol=new Set(hols.filter(h=>h.competencia===mesAtualHol).map(h=>norm(h.nome)));
+  const semHol=funcsAtivos.filter(f=>!comHol.has(norm(f.nome)));
   const anv=funcsAtivos.filter(f=>f.nasc&&parseInt(f.nasc.split('-')[1])===mes).length;
-  document.getElementById('dstats').innerHTML=`<div class="sc"><div class="slbl">Colaboradores</div><div class="sval">${atv}</div></div><div class="sc"><div class="slbl">Férias vencidas</div><div class="sval r">${fv}</div></div><div class="sc"><div class="slbl">ASOs vencidos</div><div class="sval r">${av2}</div></div><div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${fal+aal}</div></div><div class="sc"><div class="slbl">Aniversários mês</div><div class="sval b">${anv}</div></div><div class="sc"><div class="slbl">Holerites</div><div class="sval g">${hols.length}</div></div>`;
+  document.getElementById('dstats').innerHTML=`<div class="sc"><div class="slbl">Colaboradores</div><div class="sval">${atv}</div></div><div class="sc"><div class="slbl">Férias vencidas</div><div class="sval r">${fv}</div></div><div class="sc"><div class="slbl">ASOs vencidos</div><div class="sval r">${av2}</div></div><div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${fal+aal}</div></div><div class="sc"><div class="slbl">Aniversários mês</div><div class="sval b">${anv}</div></div><div class="sc" style="cursor:pointer" onclick="mostrarSemHolerite()" title="Clique para ver quem está sem holerite"><div class="slbl">Holerites</div><div class="sval g">${hols.length}</div>${semHol.length?`<div style="font-size:10px;color:var(--rd);margin-top:2px">${semHol.length} sem holerite</div>`:''}</div>`;
   // Gráfico férias donut
   setTimeout(()=>{
     drawDonut('chart-ferias','chart-ferias-leg',[
@@ -1394,7 +1408,12 @@ function rAdiant(){
   list=list.filter(function(a){
     const f=funcs.find(function(x){return x.id===a.fid;});
     if(sr&&(!f||!f.nome.toLowerCase().includes(sr)))return false;
-    if(fs&&a.status!==fs)return false;
+    if(fs){
+      // Considera status efetivo: auto-quitado conta como quitado
+      const calc=calcAdiant(a);
+      const statusEfetivo=a.status==='quitado'||calc.autoQuitado?'quitado':'pendente';
+      if(statusEfetivo!==fs)return false;
+    }
     return true;
   });
   const tb=document.getElementById('adi-tbody');
