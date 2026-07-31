@@ -130,7 +130,15 @@ tbody td{padding:9px 12px;vertical-align:middle}
       try {
         await setDoc(doc(db, 'dp', 'funcs'), { data: JSON.stringify(funcs) });
         await setDoc(doc(db, 'dp', 'lancs'), { data: JSON.stringify(lancs) });
-        await setDoc(doc(db, 'dp', 'hols'),  { data: JSON.stringify(hols) });
+        // Salva hols SEM o base64 no documento principal (evita limite de 1MB)
+        const holsSemPDF = hols.map(h => { const {pdfBase64,...resto} = h; return resto; });
+        await setDoc(doc(db, 'dp', 'hols'),  { data: JSON.stringify(holsSemPDF) });
+        // PDFs originais salvos separadamente por holerite
+        const holsComPDF = hols.filter(h => h.pdfBase64);
+        for(const h of holsComPDF){
+          const pdfId = (h.id||'x') + '_' + (h.competencia||'').replace('/','_');
+          await setDoc(doc(db, 'pdfs', pdfId), { nome: h.nome, competencia: h.competencia, pdfBase64: h.pdfBase64 });
+        }
         await setDoc(doc(db, 'dp', 'asos'),  { data: JSON.stringify(asos) });
         await setDoc(doc(db, 'dp', 'plano'), { data: JSON.stringify(plano) });
         if(adiant!==undefined)await setDoc(doc(db, 'dp', 'adiant'), { data: JSON.stringify(adiant) });
@@ -151,6 +159,23 @@ tbody td{padding:9px 12px;vertical-align:middle}
           get('funcs'), get('lancs'), get('hols'), get('asos'), get('plano'),
           get('adiant'), get('comissoes'), get('marmitas'), get('cfgfin')
         ]);
+        // Busca PDFs separados e reúne com os hols
+        if(hols && hols.length){
+          try{
+            const {getDocs, collection: col} = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+            const pdfsSnap = await getDocs(col(db, 'pdfs'));
+            const pdfsMap = {};
+            pdfsSnap.forEach(d => {
+              const dd = d.data();
+              const key = (dd.nome||'') + '|' + (dd.competencia||'');
+              pdfsMap[key] = dd.pdfBase64;
+            });
+            hols.forEach(h => {
+              const key = (h.nome||'') + '|' + (h.competencia||'');
+              if(pdfsMap[key]) h.pdfBase64 = pdfsMap[key];
+            });
+          }catch(ep){ console.warn('PDFs load error:', ep); }
+        }
         return { funcs, lancs, hols, asos, plano, adiant, comissoes, marmitas, cfgFin };
       } catch(e) {
         console.warn('Firebase load error:', e);
@@ -837,14 +862,16 @@ function expDashPDF(){
 }
 
 function rD(){
-  const atv=funcs.filter(f=>f.status!=='Inativo').length;
+  const funcsAtivos=funcs.filter(f=>f.status!=='Inativo');
+  const atv=funcsAtivos.length;
   let fv=0,fal=0,fg=0,fok=0;
-  funcs.forEach(f=>(f.periodos||[]).forEach(p=>{const s=cP(p,f.id);if(s.s==='vencida')fv++;else if(s.s==='alerta')fal++;else if(s.s==='gozo')fg++;else fok++;}));
-  // ASO stats
+  // Conta férias só de ativos
+  funcsAtivos.forEach(f=>(f.periodos||[]).forEach(p=>{const s=cP(p,f.id);if(s.s==='vencida')fv++;else if(s.s==='alerta')fal++;else if(s.s==='gozo')fg++;else fok++;}));
+  // ASO stats só de ativos
   let av2=0,aal=0,aok=0,asem=0;
-  funcs.forEach(f=>{const sa=cAso(f);if(sa==='vencido')av2++;else if(sa==='alerta')aal++;else if(sa==='ok')aok++;else asem++;});
+  funcsAtivos.forEach(f=>{const sa=cAso(f);if(sa==='vencido')av2++;else if(sa==='alerta')aal++;else if(sa==='ok')aok++;else asem++;});
   const mes=HOJE.getMonth()+1;
-  const anv=funcs.filter(f=>f.nasc&&parseInt(f.nasc.split('-')[1])===mes).length;
+  const anv=funcsAtivos.filter(f=>f.nasc&&parseInt(f.nasc.split('-')[1])===mes).length;
   document.getElementById('dstats').innerHTML=`<div class="sc"><div class="slbl">Colaboradores</div><div class="sval">${atv}</div></div><div class="sc"><div class="slbl">Férias vencidas</div><div class="sval r">${fv}</div></div><div class="sc"><div class="slbl">ASOs vencidos</div><div class="sval r">${av2}</div></div><div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${fal+aal}</div></div><div class="sc"><div class="slbl">Aniversários mês</div><div class="sval b">${anv}</div></div><div class="sc"><div class="slbl">Holerites</div><div class="sval g">${hols.length}</div></div>`;
   // Gráfico férias donut
   setTimeout(()=>{
@@ -860,15 +887,15 @@ function rD(){
     drawBar('chart-adm',labels,vals,'#1D9E75');
   },50);
   // Alertas férias
-  let ah='';funcs.forEach(f=>(f.periodos||[]).forEach(p=>{const s=cP(p,f.id);if(s.s==='vencida'||s.s==='alerta'){const c=ac(f.nome);ah+=`<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--bd)"><div class="av" style="background:${c.bg};color:${c.fg};font-size:9px">${ini(f.nome)}</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.nome}</div><div style="font-size:10px;color:var(--tx3)">${fd(p.ini)} – ${fd(p.fim)}</div></div><span class="badge b${s.s}" style="font-size:9px">${s.l}</span></div>`; }}));
+  let ah='';funcsAtivos.forEach(f=>(f.periodos||[]).forEach(p=>{const s=cP(p,f.id);if(s.s==='vencida'||s.s==='alerta'){const c=ac(f.nome);ah+=`<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--bd)"><div class="av" style="background:${c.bg};color:${c.fg};font-size:9px">${ini(f.nome)}</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.nome}</div><div style="font-size:10px;color:var(--tx3)">${fd(p.ini)} – ${fd(p.fim)}</div></div><span class="badge b${s.s}" style="font-size:9px">${s.l}</span></div>`; }}));
   document.getElementById('d-alertas').innerHTML=ah||'<div style="padding:16px 14px;font-size:12px;color:var(--tx3)">Nenhum alerta.</div>';
   // Alertas ASO
-  let aa='';funcs.forEach(f=>{const sa=cAso(f);if(sa==='vencido'||sa==='alerta'){const c=ac(f.nome);const ult=ultimoAso(f.id);const dr=ult?Math.round((new Date(ult.validade+'T12:00:00')-HOJE)/86400000):null;const badgeTxt=sa==='vencido'?'Vencido':(dr+'d');const badgeCls=sa==='vencido'?'bvencida':'balerta';aa+='<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--bd)"><div class="av" style="background:'+c.bg+';color:'+c.fg+';font-size:9px">'+ini(f.nome)+'</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.nome+'</div><div style="font-size:10px;color:var(--tx3)">'+(ult?fd(ult.validade):'Sem ASO')+'</div></div><span class="badge '+badgeCls+'" style="font-size:9px">'+badgeTxt+'</span></div>';}});
+  let aa='';funcsAtivos.forEach(f=>{const sa=cAso(f);if(sa==='vencido'||sa==='alerta'){const c=ac(f.nome);const ult=ultimoAso(f.id);const dr=ult?Math.round((new Date(ult.validade+'T12:00:00')-HOJE)/86400000):null;const badgeTxt=sa==='vencido'?'Vencido':(dr+'d');const badgeCls=sa==='vencido'?'bvencida':'balerta';aa+='<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--bd)"><div class="av" style="background:'+c.bg+';color:'+c.fg+';font-size:9px">'+ini(f.nome)+'</div><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+f.nome+'</div><div style="font-size:10px;color:var(--tx3)">'+(ult?fd(ult.validade):'Sem ASO')+'</div></div><span class="badge '+badgeCls+'" style="font-size:9px">'+badgeTxt+'</span></div>';}});
   document.getElementById('d-asos-alert').innerHTML=aa||'<div style="padding:16px 14px;font-size:12px;color:var(--tx3)">Nenhum alerta.</div>';
   const mn=HOJE.toLocaleString('pt-BR',{month:'long'});
-  let av='';funcs.filter(f=>f.nasc&&parseInt(f.nasc.split('-')[1])===mes).sort((a,b)=>parseInt(a.nasc.split('-')[2])-parseInt(b.nasc.split('-')[2])).forEach(f=>{const c=ac(f.nome);av+=`<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--bd)"><div class="av" style="background:${c.bg};color:${c.fg};font-size:9px">${ini(f.nome)}</div><div style="flex:1;font-size:11px;font-weight:500">${f.nome}</div><div style="font-size:11px;color:var(--tx3)">dia ${parseInt(f.nasc.split('-')[2])}</div></div>`;});
+  let av='';funcsAtivos.filter(f=>f.nasc&&parseInt(f.nasc.split('-')[1])===mes).sort((a,b)=>parseInt(a.nasc.split('-')[2])-parseInt(b.nasc.split('-')[2])).forEach(f=>{const c=ac(f.nome);av+=`<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--bd)"><div class="av" style="background:${c.bg};color:${c.fg};font-size:9px">${ini(f.nome)}</div><div style="flex:1;font-size:11px;font-weight:500">${f.nome}</div><div style="font-size:11px;color:var(--tx3)">dia ${parseInt(f.nasc.split('-')[2])}</div></div>`;});
   document.getElementById('d-aniv').innerHTML=av||`<div style="padding:16px 14px;font-size:12px;color:var(--tx3)">Nenhum em ${mn}.</div>`;
-  const rc=[...funcs].sort((a,b)=>(b.admissao||'').localeCompare(a.admissao||'')).slice(0,5);
+  const rc=[...funcsAtivos].sort((a,b)=>(b.admissao||'').localeCompare(a.admissao||'')).slice(0,5);
   document.getElementById('d-adm').innerHTML=rc.map(f=>{const c=ac(f.nome);const sb={Ativo:'ativo',Férias:'ferias',Afastado:'afastado',Inativo:'inativo'}[f.status||'Ativo']||'ativo';return`<tr><td><div style="display:flex;align-items:center;gap:8px"><div class="av" style="background:${c.bg};color:${c.fg}">${ini(f.nome)}</div><div><div class="tnm">${f.nome}</div><div class="tsb">${f.cargo||'—'}</div></div></div></td><td>${f.cargo||'—'}</td><td>${fd(f.admissao)}</td><td><span class="badge b${sb}">${f.status||'Ativo'}</span></td></tr>`;}).join('');
 }
 
@@ -1604,17 +1631,80 @@ function rHol(){
       if(h.fgts)vRows.push({l:'FGTS',v:h.fgts,n:false});
       if(h.outros_descontos)vRows.push({l:'Outros descontos',v:h.outros_descontos,n:true});
       if(h.outros_proventos)vRows.push({l:'Outros proventos',v:h.outros_proventos,n:false});
-      return`<div class="hol-card"><div class="hol-comp">${h.competencia||'—'}</div><div class="hol-liq">${fR(h.liquido)} <span>líquido</span></div><div class="hol-verbas">${vRows.map(r=>`<div class="hv"><span class="hvl">${r.l}</span><span class="hvv${r.n?' neg':''}">${r.n?'− ':''}${fR(r.v)}</span></div>`).join('')}</div><button class="btn btn-sm" onclick="gerarPDF('${encodeURIComponent(h.nome)}','${h.competencia}')" style="width:100%;justify-content:center">Baixar PDF</button></div>`;
+      return`<div class="hol-card"><div class="hol-comp">${h.competencia||'—'}</div><div class="hol-liq">${fR(h.liquido)} <span>líquido</span></div><div class="hol-verbas">${vRows.map(r=>`<div class="hv"><span class="hvl">${r.l}</span><span class="hvv${r.n?' neg':''}">${r.n?'− ':''}${fR(r.v)}</span></div>`).join('')}</div><div style="display:flex;gap:6px">${h.pdfBase64?`<button class="btn btn-sm" onclick="verPDFOriginal('${h.nome}','${h.competencia}')" style="flex:1;justify-content:center">📄 Ver original</button>`:''}
+        <button class="btn btn-sm" onclick="gerarPDF('${encodeURIComponent(h.nome)}','${h.competencia}')" style="flex:1;justify-content:center">⬇ Baixar</button></div></div>`;
     }).join('');
     return`<div class="func-card"><div class="func-hdr" onclick="togH('${uid}')"><div class="av" style="background:${c.bg};color:${c.fg}">${ini(f.nome)}</div><div class="func-info"><div class="func-nome">${f.nome}</div><div class="func-sub">${fR(hs.reduce((s,h)=>s+(parseFloat(h.liquido)||0),0))} total · ${qtd} holerite(s)</div></div><span class="badge bativo">${qtd} ${qtd===1?'mês':'meses'}</span><svg class="chev" id="${uid}-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px"><polyline points="6 9 12 15 18 9"/></svg></div><div class="hol-wrap" id="${uid}-wrap"><div class="hol-grid">${cards}</div></div></div>`;
   }).join('');
 }
 function togH(uid){const w=document.getElementById(uid+'-wrap');const ch=document.getElementById(uid+'-chev');const o=w.classList.toggle('open');if(o)ch.classList.add('open');else ch.classList.remove('open');}
 function limHol(){if(!confirm('Limpar todos os holerites?'))return;hols=[];sv();rHol();toast('Removidos.');}
+function verPDFOriginal(nome,comp){
+  const h=hols.find(x=>norm(x.nome)===norm(nome)&&x.competencia===comp);
+  if(!h||!h.pdfBase64){toast('PDF original não disponível. Reimporte o holerite.');return;}
+  // Abre o PDF original numa nova aba
+  const bin=atob(h.pdfBase64);
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  const blob=new Blob([arr],{type:'application/pdf'});
+  const url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+
 function dlTodos(){const fm=(document.getElementById('hfmes')||{}).value||'';const sr=(document.getElementById('hfs')||{}).value?.toLowerCase()||'';const filtrado=hols.filter(h=>{if(sr&&!norm(h.nome).includes(sr))return false;if(fm&&h.competencia!==fm)return false;return true;});if(!filtrado.length){toast('Nenhum holerite.');return;}toast(`Gerando ${filtrado.length} PDFs...`);filtrado.forEach((h,i)=>setTimeout(()=>gerarPDF(encodeURIComponent(h.nome),h.competencia),i*350));}
 
 // ═══════════════════ EXPORTAÇÕES ═══════════════════
-function expF(){const r=[['Código','Nome','CPF','Setor','Cargo','Admissão','Status']];funcs.forEach(f=>r.push([f.id,f.nome,f.cpf,f.setor,f.cargo,fd(f.admissao),f.status||'Ativo']));csvDl(r,'funcionarios.csv');}
+function expF(){
+  const logoEl=document.querySelector('.logo img');
+  const logoSrc=logoEl?logoEl.src:'';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const ativos=funcs.filter(f=>f.status!=='Inativo');
+  const inativos=funcs.filter(f=>f.status==='Inativo');
+  const linhas=[...ativos].map(f=>{
+    const c=ac(f.nome);
+    const sb={Ativo:'#1D9E75',Inativo:'#9B9A92',Férias:'#2563EB',Afastado:'#BA7517'}[f.status||'Ativo']||'#1D9E75';
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:${c.bg};color:${c.fg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0">${ini(f.nome)}</div>
+        <div><div style="font-weight:600;font-size:12px">${f.nome}</div><div style="font-size:10px;color:#888">${f.cargo||'—'}</div></div>
+      </div></td>
+      <td style="font-size:11px">${f.id||'—'}</td>
+      <td style="font-size:11px">${f.setor||'—'}</td>
+      <td style="font-size:11px">${fd(f.admissao)||'—'}</td>
+      <td style="font-size:11px">${f.cpf||'—'}</td>
+      <td><span style="color:${sb};font-weight:600;font-size:11px">${f.status||'Ativo'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Funcionários - ${hoje}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:30px;font-size:12px;color:#222}
+      .hdr{display:flex;align-items:center;gap:14px;border-bottom:2px solid #1D9E75;padding-bottom:12px;margin-bottom:20px}
+      .hdr img{width:50px;height:50px;object-fit:contain}
+      h1{font-size:16px;margin:0}.sub{font-size:11px;color:#888;margin:2px 0 0}
+      .resumo{display:flex;gap:16px;margin-bottom:20px}
+      .res-card{border:1px solid #ddd;border-radius:8px;padding:10px 14px;min-width:100px;text-align:center}
+      .res-card .lbl{font-size:10px;color:#888;text-transform:uppercase}
+      .res-card .val{font-size:20px;font-weight:700;margin-top:2px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#f5f5f0;padding:8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#666;border-bottom:2px solid #ddd}
+      td{padding:8px;border-bottom:1px solid #eee;vertical-align:middle}
+      @media print{body{padding:15px}}
+    </style></head><body>
+    <div class="hdr">${logoSrc?'<img src="'+logoSrc+'">' :''}<div><h1>Quadro de Funcionários</h1><p class="sub">Agro Lazarini · Emitido em ${hoje}</p></div></div>
+    <div class="resumo">
+      <div class="res-card"><div class="lbl">Total</div><div class="val">${funcs.length}</div></div>
+      <div class="res-card"><div class="lbl">Ativos</div><div class="val" style="color:#1D9E75">${ativos.length}</div></div>
+
+    </div>
+    <table><thead><tr><th>Funcionário</th><th>Código</th><th>Setor</th><th>Admissão</th><th>CPF</th><th>Status</th></tr></thead>
+    <tbody>${linhas}</tbody></table>
+    </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),400);
+}
 function expFer(){
   const w=window.open('','_blank');
   const logoEl=document.querySelector('.logo img');
@@ -1720,6 +1810,15 @@ async function lerPDF(file,tipo){
   setBar(pfx,10,'Abrindo PDF...');
   try{
     const buf=await file.arrayBuffer();
+    // Converte para base64 para guardar o PDF original
+    let pdfBase64=null;
+    if(tipo==='holerite'||tipo==='hol'||tipo!=='ferias'){
+      const bytes=new Uint8Array(buf);
+      let binary='';
+      for(let i=0;i<bytes.byteLength;i++)binary+=String.fromCharCode(bytes[i]);
+      pdfBase64=btoa(binary);
+      window._pdfBase64Atual=pdfBase64;
+    }
     setBar(pfx,30,'Lendo páginas...');
     const pdf=await pdfjsLib.getDocument({data:buf}).promise;
     let textoTotal='';
@@ -1953,6 +2052,8 @@ function processarHolerites(texto,pfx){
   resultado.forEach(h=>{
     const key=norm(h.nome)+'|'+h.competencia;
     const idx=hols.findIndex(x=>norm(x.nome)+'|'+x.competencia===key);
+    // Guarda o PDF original se disponível
+    if(window._pdfBase64Atual){h.pdfBase64=window._pdfBase64Atual;window._pdfBase64Atual=null;}
     if(idx>=0)hols[idx]=h;else hols.push(h);
     // Match SOMENTE por nome — id pode repetir entre empresas diferentes
     const fi=funcs.findIndex(f=>norm(f.nome)===norm(h.nome));
