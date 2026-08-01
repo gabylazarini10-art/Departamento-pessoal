@@ -1082,7 +1082,7 @@ function rAsos(){
   let vd=0,al=0,ok=0,sem=0;
   funcs.filter(f=>f.status!=='Inativo').forEach(f=>{const s=cAso(f);if(s==='vencido')vd++;else if(s==='alerta')al++;else if(s==='ok')ok++;else sem++;});
   document.getElementById('aso-stats').innerHTML=
-    `<div class="sc"><div class="slbl">Total</div><div class="sval">${funcs.length}</div></div>`+
+    `<div class="sc"><div class="slbl">Total</div><div class="sval">${vd+al+ok+sem}</div></div>`+
     `<div class="sc"><div class="slbl">Vencidos</div><div class="sval r">${vd}</div></div>`+
     `<div class="sc"><div class="slbl">Próx. vencimento</div><div class="sval a">${al}</div></div>`+
     `<div class="sc"><div class="slbl">Em dia</div><div class="sval g">${ok}</div></div>`+
