@@ -1080,7 +1080,7 @@ function rAsos(){
   const sr=(document.getElementById('aso-s').value||'').toLowerCase();
   const fs=document.getElementById('aso-st').value;
   let vd=0,al=0,ok=0,sem=0;
-  funcs.forEach(f=>{const s=cAso(f);if(s==='vencido')vd++;else if(s==='alerta')al++;else if(s==='ok')ok++;else sem++;});
+  funcs.filter(f=>f.status!=='Inativo').forEach(f=>{const s=cAso(f);if(s==='vencido')vd++;else if(s==='alerta')al++;else if(s==='ok')ok++;else sem++;});
   document.getElementById('aso-stats').innerHTML=
     `<div class="sc"><div class="slbl">Total</div><div class="sval">${funcs.length}</div></div>`+
     `<div class="sc"><div class="slbl">Vencidos</div><div class="sval r">${vd}</div></div>`+
@@ -1088,6 +1088,7 @@ function rAsos(){
     `<div class="sc"><div class="slbl">Em dia</div><div class="sval g">${ok}</div></div>`+
     `<div class="sc"><div class="slbl">Sem registro</div><div class="sval">${sem}</div></div>`;
   const list=funcs.filter(f=>{
+    if(f.status==='Inativo')return false; // oculta inativos
     if(sr&&!f.nome.toLowerCase().includes(sr))return false;
     if(fs&&cAso(f)!==fs)return false;
     return true;
