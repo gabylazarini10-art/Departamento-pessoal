@@ -1894,7 +1894,7 @@ function processarFerias(texto,pfx){
 
   // Padrão BS: CODIGO NOME DATA_ADM DATA_VENCTO ... DATA_INI_PERIOD DATA_FIM_PERIOD ... SALDO ... DATA_LIMITE
   // Ex: "10018 EDINEIA MOURA DOS SANTOS 10/10/2025 09/10/2026 0 08/12 10/10/2025 09/10/2026 .... 20 0 30 10/09/2027"
-  const reFunc=/\b(\d{1,6})\s+([A-Z][A-Z\s]{3,50}?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+\d+\s+\d{2}\/\d{2}\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})[\s\S]{0,60}?(\d{2}\/\d{2}\/\d{4})/g;
+  const reFunc=/\b([A-Z]?\d{1,10})\s+([A-Z][A-Z\s]{3,50}?)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+\d+\s+\d{2}\/\d{2}\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})[\s\S]{0,60}?(\d{2}\/\d{2}\/\d{4})/g;
   // Padrão para linhas de período adicional (sem código/nome): DATA DATA 0 MM/DD DATA DATA ... SALDO ... DATA_LIMITE
   const rePer=/(?<![\d\/])(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+\d+\s+\d{2}\/\d{2}\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})[\s\S]{0,60}?(\d{2}\/\d{2}\/\d{4})/g;
 
@@ -1929,7 +1929,7 @@ function processarFerias(texto,pfx){
   // Padrão BS: "- - DD/MM/YYYY DD/MM/YYYY ....pontos.... SALDO 0 30 DD/MM/YYYY"
   // Monta mapa posição→chave para associar ao funcionário correto
   const posChave=[];
-  const reFuncPos=/\b(\d{1,6})\s+([A-Z][A-Z\s]{3,50}?)\s+(\d{2}\/\d{2}\/\d{4})/g;
+  const reFuncPos=/\b([A-Z]?\d{1,10})\s+([A-Z][A-Z\s]{3,50}?)\s+(\d{2}\/\d{2}\/\d{4})/g;
   let mp;
   while((mp=reFuncPos.exec(flat))!==null){
     const n=mp[2].trim().replace(/\s+/g,' ');
@@ -1950,6 +1950,15 @@ function processarFerias(texto,pfx){
     let dono=null;
     for(let i=posChave.length-1;i>=0;i--){if(posChave[i].pos<pos){dono=posChave[i].chave;break;}}
     if(!dono||!enc[dono])continue;
+    // Não adiciona período se início é menos de 30 dias após a admissão do funcionário
+    // (evita períodos lixo de recém-admitidos)
+    const admDono=enc[dono].admissao;
+    if(admDono){
+      const dAdm=new Date(admDono.split('/').reverse().join('-')+'T12:00:00');
+      const dIni2=new Date(ini2.split('/').reverse().join('-')+'T12:00:00');
+      const diffDias=Math.round((dIni2-dAdm)/86400000);
+      if(diffDias<30)continue; // período começa muito cedo após admissão — descarta
+    }
     const jaTem=enc[dono].periodos.find(p=>p.ini===ini2);
     if(!jaTem)enc[dono].periodos.push({ini:ini2,fim:fim2,limite:lim2||fim2,saldo:saldo2,diasDir:30});
   }
@@ -1957,7 +1966,7 @@ function processarFerias(texto,pfx){
   // Fallback: tenta linha a linha se regex acima não pegou nada
   if(!Object.keys(enc).length){
     const linhas=texto.split('\n').map(l=>l.trim()).filter(Boolean);
-    const reF=/^(\d{1,6})\s+([A-Z][A-Z\s]+?)\s+(\d{2}\/\d{2}\/\d{4})/;
+    const reF=/^([A-Z]?\d{1,10})\s+([A-Z][A-Z\s]+?)\s+(\d{2}\/\d{2}\/\d{4})/;
     const rP=/^(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})/;
     let uchave=null;
     linhas.forEach(l=>{
