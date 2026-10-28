@@ -364,7 +364,15 @@ tbody td{padding:9px 12px;vertical-align:middle}
       <input type="text" id="ferS" placeholder="Buscar funcionário..." oninput="rFer()">
       <select id="ferSt" onchange="rFer()"><option value="">Todos</option><option value="vencida">Vencida</option><option value="alerta">Próx. vencimento</option><option value="acumulado">Acumulado</option><option value="gozo">Em gozo</option><option value="ok">Em dia</option></select>
       <div class="mla" style="display:flex;gap:7px">
-        <button class="btn" onclick="expFer()">📄 Exportar PDF</button>
+        <div style="position:relative;display:inline-block">
+          <button class="btn" onclick="document.getElementById('expFerMenu').style.display=document.getElementById('expFerMenu').style.display==='block'?'none':'block'">📄 Exportar PDF ▾</button>
+          <div id="expFerMenu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--bd);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:100;min-width:190px">
+            <div onclick="expFer('');document.getElementById('expFerMenu').style.display='none'" style="padding:10px 16px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--bd)" onmouseover="this.style.background='#f5f5f0'" onmouseout="this.style.background=''">📋 Todos os funcionários</div>
+            <div onclick="expFer('vencida');document.getElementById('expFerMenu').style.display='none'" style="padding:10px 16px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--bd);color:#C0392B;font-weight:600" onmouseover="this.style.background='#f5f5f0'" onmouseout="this.style.background=''">⚠ Férias vencidas</div>
+            <div onclick="expFer('alerta');document.getElementById('expFerMenu').style.display='none'" style="padding:10px 16px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--bd);color:#BA7517;font-weight:600" onmouseover="this.style.background='#f5f5f0'" onmouseout="this.style.background=''">🔔 Próx. vencimento</div>
+            <div onclick="expFer('ok');document.getElementById('expFerMenu').style.display='none'" style="padding:10px 16px;font-size:12px;cursor:pointer;color:#1D9E75;font-weight:600" onmouseover="this.style.background='#f5f5f0'" onmouseout="this.style.background=''">✓ Em dia</div>
+          </div>
+        </div>
         <button class="btn btn-g" onclick="go('lancar')">Lançar gozo</button>
       </div>
     </div>
@@ -723,7 +731,11 @@ function cP(p,fid){
   const sd=Math.max(0,p.saldo-dg);
   if(eg)return{s:'gozo',l:'Em gozo',sd};
   if(sd===0)return{s:'ok',l:'Gozada',sd};
-  // Vencida se: limite de gozo já passou (fimAq é apenas informativo)
+  // Em dia: ainda dentro do período aquisitivo
+  if(fimAq&&fimAq>HOJE)return{s:'ok',l:'Em dia',sd};
+  // Passou o fim do período aquisitivo e não gozou = Vencida
+  if(fimAq&&fimAq<=HOJE)return{s:'vencida',l:'Vencida',sd};
+  // Fallback sem data: usa limite
   if(dr<=0)return{s:'vencida',l:'Vencida',sd};
   if(dr<=90)return{s:'alerta',l:'Vence '+dr+'d',sd};
   return{s:'ok',l:'Em dia',sd};
@@ -1725,19 +1737,26 @@ function expF(){
   w.document.close();
   setTimeout(()=>w.print(),400);
 }
-function expFer(){
+function expFer(filtro){
+  if(filtro===undefined)filtro='';
   const w=window.open('','_blank');
   const logoEl=document.querySelector('.logo img');
   const logoSrc=logoEl?logoEl.src:'';
   const hoje=new Date().toLocaleDateString('pt-BR');
   let linhas='';
   const statusCor={vencida:'#C0392B',alerta:'#BA7517',ok:'#1D9E75',gozo:'#2563EB',acumulado:'#92400E'};
+  const tituloFiltro={'':`Todos os funcionários`,'vencida':'Férias Vencidas','alerta':'Próximo Vencimento','ok':'Em Dia'}[filtro]||'Todos';
+  let totalFuncs=0;
   funcs.filter(f=>f.status!=='Inativo').sort((a,b)=>a.nome.localeCompare(b.nome)).forEach(f=>{
-    (f.periodos||[]).forEach((p,i)=>{
+    // Filtra períodos pelo status se houver filtro
+    const persFiltrados=(f.periodos||[]).filter(p=>!filtro||cP(p,f.id).s===filtro);
+    if(!persFiltrados.length)return;
+    totalFuncs++;
+    persFiltrados.forEach((p,i)=>{
       const s=cP(p,f.id);
       const cor=statusCor[s.s]||'#333';
       linhas+=`<tr>
-        ${i===0?`<td rowspan="${(f.periodos||[]).length}" style="font-weight:600;vertical-align:top;padding-top:10px">${f.nome}<br><span style="font-size:10px;color:#888;font-weight:400">${f.id} · ${f.cargo||'—'}</span></td>`:''}
+        ${i===0?`<td rowspan="${persFiltrados.length}" style="font-weight:600;vertical-align:top;padding-top:10px">${f.nome}<br><span style="font-size:10px;color:#888;font-weight:400">${f.id} · ${f.cargo||'—'}</span></td>`:''}
         <td>${fd(p.ini)} – ${fd(p.fim)}</td>
         <td>${fd(p.limite)}</td>
         <td style="text-align:center;font-weight:600">${s.sd}</td>
@@ -1758,7 +1777,7 @@ function expFer(){
       tr:last-child td{border-bottom:none}
       @media print{body{padding:15px}}
     </style></head><body>
-    <div class="hdr">${logoSrc?'<img src="'+logoSrc+'">' :''}<div><h1>Programação de Férias</h1><p class="sub">Agro Lazarini · Emitido em ${hoje}</p></div></div>
+    <div class="hdr">${logoSrc?'<img src="'+logoSrc+'">' :''}<div><h1>Programação de Férias — ${tituloFiltro}</h1><p class="sub">Agro Lazarini · ${totalFuncs} funcionário(s) · Emitido em ${hoje}</p></div></div>
     <table><thead><tr><th>Funcionário</th><th>Período Aquisitivo</th><th>Limite p/ Gozo</th><th>Saldo</th><th>Status</th></tr></thead>
     <tbody>${linhas}</tbody></table>
     </body></html>`);
