@@ -1994,7 +1994,26 @@ function processarFerias(texto,pfx){
     }else{
       const idx=funcs.findIndex(f=>norm(f.nome)===norm(item.nome));
       let mudou=false;
-      item.periodos.forEach(p=>{const jt=(funcs[idx].periodos||[]).find(ep=>ep.ini===p.ini);if(!jt){funcs[idx].periodos.push({...p});mudou=true;}else{jt.saldo=p.saldo;jt.limite=p.limite;jt.fim=p.fim;mudou=true;}});
+      item.periodos.forEach(p=>{
+        const jt=(funcs[idx].periodos||[]).find(ep=>ep.ini===p.ini);
+        if(!jt){
+          // Verifica se já existe um período para o mesmo ano aquisitivo
+          // (mesmo ano de início, apenas datas levemente diferentes por reimportação)
+          const anoIni=p.ini?p.ini.substring(0,4):'';
+          const mesIni=p.ini?p.ini.substring(5,7):'';
+          const similar=(funcs[idx].periodos||[]).find(ep=>{
+            if(!ep.ini)return false;
+            const diffMs=Math.abs(new Date(ep.ini+'T12:00:00')-new Date(p.ini+'T12:00:00'));
+            return diffMs < 45*86400000; // menos de 45 dias de diferença = mesmo período aquisitivo
+          });
+          if(similar){
+            // Atualiza o saldo do período similar em vez de criar duplicata
+            similar.saldo=p.saldo;similar.limite=p.limite||similar.limite;mudou=true;
+          } else {
+            funcs[idx].periodos.push({...p});mudou=true;
+          }
+        }else{jt.saldo=p.saldo;jt.limite=p.limite;jt.fim=p.fim;mudou=true;}
+      });
       if(mudou)atu++;else semAlt.push(ex.nome);
     }
   });
