@@ -730,7 +730,8 @@ function cP(p,fid){
   const eg=gz.some(l=>pd(l.ini)<=HOJE&&pd(l.fim)>=HOJE);
   const sd=Math.max(0,p.saldo-dg);
   if(eg)return{s:'gozo',l:'Em gozo',sd};
-  if(sd===0)return{s:'ok',l:'Gozada',sd};
+  // Gozada só se o período aquisitivo já passou (saldo 0 em período futuro = bloqueado pela BS)
+  if(sd===0&&fimAq&&fimAq<=HOJE)return{s:'ok',l:'Gozada',sd};
   // Em dia: ainda dentro do período aquisitivo
   if(fimAq&&fimAq>HOJE)return{s:'ok',l:'Em dia',sd};
   // Passou o fim do período aquisitivo e não gozou = Vencida
